@@ -1,2 +1,2 @@
-/.vscode/ 			# 过滤整个文件夹
+.vscode/
 *.exe
