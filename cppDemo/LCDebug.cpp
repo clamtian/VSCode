@@ -67,7 +67,7 @@ public:
             sum[r] -= jobs[pos];
         }
         
-    }
+    } 
 };
 
 int main() {
