@@ -40,37 +40,33 @@ struct TreeNode {
 
 class Solution {
 public:
-    int longestCommonSubsequence(string text1, string text2) {
-        int m = text1.size(), n = text2.size();
-        vector<pair<int, int>> dp(n); //<length, pos>
-        for(int j = 0; j < m; ++j){
-            if(text1[j] == text2[0]){
-                dp[0].first = 1;
-                dp[0].second = j;
-                break;
-            }
+    int res = INT_MAX;
+    int minimumTimeRequired(vector<int>& jobs, int k) {
+        sort(jobs.begin(), jobs.end());
+        int n = jobs.size();
+        vector<int> sum(k, 0);
+        sum[0] = jobs[n - 1];
+        fill(jobs, sum, n - 2, k - 1, jobs[n - 1]);
+        return res;
+    }
+    void fill(vector<int>& jobs, vector<int>& sum, int pos, int space, int maxSum){
+        if(pos == -1 || pos + 1 == space) {
+            res = min(res, maxSum);
+            return;
         }
-        for(int i = 1; i < n; ++i){
-            int maxSize = 0, maxIndex = -1;
-            for(int k = 0; k < i; ++k){
-                int pos = dp[k].second + 1;
-                while(pos < m){
-                    if(text1[pos] == text2[i] && maxSize < dp[k].second){
-                        maxSize = dp[k].second;
-                        maxIndex = pos;
-                        break;
-                    }
-                    ++pos;
-                }
-            }
-            dp[i].first = maxSize + 1;
-            dp[i].second = maxIndex;
+        int r = sum.size() - space;
+        for(int i = 0; i < r; ++i){
+            if(sum[i] + jobs[pos] >= res) continue;
+            sum[i] += jobs[pos];
+            fill(jobs, sum, pos - 1, space, max(maxSum, sum[i]));
+            sum[i] -= jobs[pos];
         }
-        int ans = 0;
-        for(int i = 0; i < n; ++i){
-            ans = max(ans, dp[i].first);
+        if(r < sum.size()){
+            sum[r] = jobs[pos];
+            fill(jobs, sum, pos - 1, space - 1, max(maxSum, sum[r]));
+            sum[r] -= jobs[pos];
         }
-        return ans;
+        
     }
 };
 
@@ -80,15 +76,8 @@ int main() {
     string str2 = "aba";
     cout << max(str1, str2) << endl;
     vector<vector<int>> a = { {3,4},{1,100},{2,2},{5,5} };
-    vector<int> b = { 2,7,9,4,4 };
+    vector<int> b = { 1,2,4,7,8 };
     vector<int> b_ = { 9,3,5,1,7,4 };
-
-    list<int> li(b.begin(), b.end());
-
-    b.erase(remove(b.begin(), b.end(), 1), b.end());
-    li.remove(1);
-
-
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
                                {'0', '1', '0'},
@@ -118,5 +107,5 @@ int main() {
     string st = ", 234 ;";
     cout << atoi(st.c_str()) << endl;
     //cout << so.func(4, a) << endl;
-    so.longestCommonSubsequence("abcde", "ace");
+    so.minimumTimeRequired(b, 2);
 }
