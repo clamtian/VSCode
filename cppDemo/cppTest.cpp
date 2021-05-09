@@ -41,8 +41,10 @@ public:
 
 int main()
 {
-    int num = 7;
-    int *p = &num;
-    cout << p << endl;
+    int k = 0;
+    int num = 2 / k;
+    cout << 4 << endl;
+    cout << num << endl;
+    
     return 1;
 }
