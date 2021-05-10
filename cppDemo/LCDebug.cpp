@@ -40,34 +40,43 @@ struct TreeNode {
 
 class Solution {
 public:
-    int res = INT_MAX;
-    int minimumTimeRequired(vector<int>& jobs, int k) {
-        sort(jobs.begin(), jobs.end());
-        int n = jobs.size();
-        vector<int> sum(k, 0);
-        sum[0] = jobs[n - 1];
-        fill(jobs, sum, n - 2, k - 1, jobs[n - 1]);
-        return res;
+    int maxSumMinProduct(vector<int>& nums) {
+        int MOD = 1e9 + 7;
+        int n = nums.size();
+        vector<long long> sum(n + 1, 0);
+        for(int i = 0; i < n; ++i){
+            sum[i + 1] = sum[i] + nums[i];
+        } 
+        vector<int> left(n, -1), right(n, -1);
+        stack<int> s;
+        for(int i = 0; i < n; ++i){
+            while(!s.empty() && nums[i] < nums[s.top()]){
+                right[s.top()] = i;
+                s.pop();
+            }
+            s.push(i);
+        }
+        while(!s.empty()){
+            right[s.top()] = n;
+            s.pop();
+        }
+        for(int i = n - 1; i >= 0; --i){
+            while(!s.empty() && nums[i] < nums[s.top()]){
+                left[s.top()] = i;
+                s.pop();
+            }
+            s.push(i);
+        }
+        while(!s.empty()){
+            left[s.top()] = 0;
+            s.pop();
+        }
+        long long ans = 0;
+        for(int i = 0; i < n; ++i){
+            ans = max(ans, nums[i] * (sum[right[i]] - sum[left[i]] - nums[left[i]]));
+        }
+        return ans % MOD;
     }
-    void fill(vector<int>& jobs, vector<int>& sum, int pos, int space, int maxSum){
-        if(pos == -1 || pos + 1 == space) {
-            res = min(res, maxSum);
-            return;
-        }
-        int r = sum.size() - space;
-        for(int i = 0; i < r; ++i){
-            if(sum[i] + jobs[pos] >= res) continue;
-            sum[i] += jobs[pos];
-            fill(jobs, sum, pos - 1, space, max(maxSum, sum[i]));
-            sum[i] -= jobs[pos];
-        }
-        if(r < sum.size()){
-            sum[r] = jobs[pos];
-            fill(jobs, sum, pos - 1, space - 1, max(maxSum, sum[r]));
-            sum[r] -= jobs[pos];
-        }
-        
-    } 
 };
 
 int main() {
@@ -76,7 +85,7 @@ int main() {
     string str2 = "aba";
     cout << max(str1, str2) << endl;
     vector<vector<int>> a = { {3,4},{1,100},{2,2},{5,5} };
-    vector<int> b = { 1,2,4,7,8 };
+    vector<int> b = { 2,5,4,2,4,5,3,1,2,4 };
     vector<int> b_ = { 9,3,5,1,7,4 };
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
@@ -107,5 +116,5 @@ int main() {
     string st = ", 234 ;";
     cout << atoi(st.c_str()) << endl;
     //cout << so.func(4, a) << endl;
-    so.minimumTimeRequired(b, 2);
+    so.maxSumMinProduct(b);
 }

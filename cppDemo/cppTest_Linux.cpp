@@ -41,10 +41,17 @@ public:
 
 int main()
 {
-    int k = 0;
-    int num = 2 / k;
-    cout << 4 << endl;
+    int num = 0;
+
     cout << num << endl;
+
+    int pid = Fork();
+
+    if(pid == 0){
+        cout << num + 1 << endl;
+    }else{
+        cout << num - 1 << endl;
+    }
     
     return 1;
 }
