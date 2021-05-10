@@ -1,7 +1,7 @@
 #include <string.h>
 #include <vector>
 #include <string>
-
+#include <unistd.h>
 #include <list>
 #include <map> 
 #include <vector> 
@@ -45,7 +45,7 @@ int main()
 
     cout << num << endl;
 
-    int pid = Fork();
+    int pid = fork();
 
     if(pid == 0){
         cout << num + 1 << endl;
