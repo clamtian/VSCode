@@ -39,19 +39,32 @@ public:
 };
 
 
+vector<vector<int>> deleteRow(vector<vector<int>>& vecs, set<int>& rows){
+    vector<vector<int>> res;
+    int n = vecs.size();
+    for(int i = 0; i < n; ++i){
+        if(rows.find(i) == rows.end()){
+            res.push_back(vecs[i]);
+        }
+    }
+    return res;
+}
 int main()
 {
-    int num = 0;
-
-    cout << num << endl;
-
-    int pid = Fork();
-
-    if(pid == 0){
-        cout << num + 1 << endl;
-    }else{
-        cout << num - 1 << endl;
-    }
+    vector<vector<int>> a = { { 3, 4, 5, 2 },
+                              { 1, 1, 4, 5 },
+                              { 2, 2, 1, 2 },
+                              { 5, 5, 5, 5 },
+                              { 5, 5, 5, 5 },
+                              { 5, 5, 5, 5 } };
+    set<int> s = { 1, 2 };
     
+    auto vecs = deleteRow(a, s);
+    /*
+    { { 3, 4, 5, 2 },
+      { 5, 5, 5, 5 },
+      { 5, 5, 5, 5 },
+      { 5, 5, 5, 5 } };
+    */
     return 1;
 }
