@@ -49,8 +49,19 @@ vector<vector<int>> deleteRow(vector<vector<int>>& vecs, set<int>& rows){
     }
     return res;
 }
+
+int f(int m, int n){
+    if(m == 0){
+        return n + 1;
+    }else if(n == 0){
+        return f(m - 1, 1);
+    }else{
+        return f(m - 1, f(m, n - 1));
+    }
+}
 int main()
 {
+    cout << f(3, 3) << endl;
     vector<vector<int>> a = { { 3, 4, 5, 2 },
                               { 1, 1, 4, 5 },
                               { 2, 2, 1, 2 },
