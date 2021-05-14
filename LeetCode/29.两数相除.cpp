@@ -16,21 +16,22 @@ using namespace std;
 class Solution {
 public:
     int divide(int dividend, int divisor) {
-        if(dividend < divisor) return 0;
+        long _dividend = abs(dividend);
+        long _divisor = abs(divisor);
+        if(_dividend < _divisor) return 0;
         int flag = 0;
-        if(dividend * dividend < 0) flag = 1;
-        dividend = abs(dividend);
-        divisor = abs(divisor);
-        int left = divisor, right = dividend;
+        if((dividend > 0 && divisor < 0) || (dividend < 0 && divisor > 0)) flag = 1;
+        long left = 1, right = _dividend;
         while(left < right){
-            int mid = left + (right - left + 1) / 2;
-            if(mid * divisor > dividend){
+            long mid = left + (right - left + 1) / 2;
+            if(mid * _divisor > _dividend){
                 right = mid - 1;
             }else{
                 left = mid;
             }
         }
-        return flag ? -left : left;
+        if(flag) left = - left;
+        return left > INT_MAX ? INT_MAX : left;
     }
 };
 // @lc code=end
