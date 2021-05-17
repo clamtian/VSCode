@@ -40,42 +40,26 @@ struct TreeNode {
 
 class Solution {
 public:
-    int maxSumMinProduct(vector<int>& nums) {
-        int MOD = 1e9 + 7;
+    int subsetXORSum(vector<int>& nums) {
+        vector<vector<int>> son;
         int n = nums.size();
-        vector<long long> sum(n + 1, 0);
+        vector<int> v = {};
+        son.push_back(v);
         for(int i = 0; i < n; ++i){
-            sum[i + 1] = sum[i] + nums[i];
-        } 
-        vector<int> left(n, -1), right(n, -1);
-        stack<int> s;
-        for(int i = 0; i < n; ++i){
-            while(!s.empty() && nums[i] < nums[s.top()]){
-                right[s.top()] = i;
-                s.pop();
+            for(auto vec : son){
+                vec.push_back(nums[i]);
+                son.push_back(vec);
             }
-            s.push(i);
         }
-        while(!s.empty()){
-            right[s.top()] = n;
-            s.pop();
-        }
-        for(int i = n - 1; i >= 0; --i){
-            while(!s.empty() && nums[i] < nums[s.top()]){
-                left[s.top()] = i;
-                s.pop();
+        int m = son.size(), ans = 0;
+        for(int i = 0; i < m; ++i){
+            int xo = 0, len = son[i].size();
+            for(int j = 0; j < len; ++j){
+                xo = xo ^ son[i][j];
             }
-            s.push(i);
+            ans += xo;
         }
-        while(!s.empty()){
-            left[s.top()] = 0;
-            s.pop();
-        }
-        long long ans = 0;
-        for(int i = 0; i < n; ++i){
-            ans = max(ans, nums[i] * (sum[right[i]] - sum[left[i]] - nums[left[i]]));
-        }
-        return ans % MOD;
+        return ans;
     }
 };
 
@@ -85,7 +69,7 @@ int main() {
     string str2 = "aba";
     cout << max(str1, str2) << endl;
     vector<vector<int>> a = { {3,4},{1,100},{2,2},{5,5} };
-    vector<int> b = { 2,5,4,2,4,5,3,1,2,4 };
+    vector<int> b = { 1,3};
     vector<int> b_ = { 9,3,5,1,7,4 };
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
@@ -116,5 +100,5 @@ int main() {
     string st = ", 234 ;";
     cout << atoi(st.c_str()) << endl;
     //cout << so.func(4, a) << endl;
-    so.maxSumMinProduct(b);
+    so.subsetXORSum(b);
 }

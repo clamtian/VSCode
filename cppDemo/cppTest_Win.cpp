@@ -1,6 +1,7 @@
 #include <string.h>
 #include <vector>
 #include <string>
+#include <bitset>
 
 #include <list>
 #include <map> 
@@ -61,7 +62,6 @@ int f(int m, int n){
 }
 int main()
 {
-    cout << f(3, 3) << endl;
     vector<vector<int>> a = { { 3, 4, 5, 2 },
                               { 1, 1, 4, 5 },
                               { 2, 2, 1, 2 },
@@ -69,5 +69,10 @@ int main()
                               { 5, 5, 5, 5 },
                               { 5, 5, 5, 5 } };
     string res('a', 3);
+
+    string s = "";
+    int num = 1;
+    cout << bitset<32>(8 >> 1) << endl;
+
     return 1;
 }
