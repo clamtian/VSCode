@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <unistd.h>
+#include <netdb.h>
 #include <list>
 #include <map> 
 #include <vector> 
@@ -18,6 +19,7 @@
 #include <sys/types.h>    
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
 #include <fcntl.h>
 using namespace std;
 
@@ -42,9 +44,43 @@ ssize_t rio_readnb(rio_t *rp, void *usrbuf, size_t n);
 ssize_t rio_readlineb(rio_t *rp, void *usrbuf, size_t maxlen);
 ssize_t rio_writen(int fd, void *usrbuf, size_t n);
 
+int main(int argc, char **argv){
+    struct addrinfo *p, *listp, hints;
+    char buf[MAXLINE];
+    int rc, flags;
+
+    //cout << argc << endl;
+    //cout << argv[0] << endl;
+    //cout << argv[1] << endl;
+    if(argc != 2){
+        cout << "usage: " << argv[0] << "<domain name>" << endl;
+        exit(0);
+    }
+
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    if((rc = getaddrinfo(argv[1], NULL, &hints, &listp)) != 0){
+        cout << "getaddrinfo error: " << gai_strerror(rc) << endl;
+        exit(1);
+    }
+    flags = NI_NUMERICHOST;
+    for(p = listp; p; p = p->ai_next){
+        getnameinfo(p->ai_addr, p->ai_addrlen, buf, MAXLINE, NULL, 0, flags);
+        cout << buf << endl;
+    }
+
+    freeaddrinfo(listp);
+
+    exit(0);
+
+}
 
 
-int main(){
+
+
+
+int main7(){
     int fd1, fd2;
     char c;
     char buf[MAXBUF] = {};
