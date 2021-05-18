@@ -40,24 +40,19 @@ struct TreeNode {
 
 class Solution {
 public:
-    int subsetXORSum(vector<int>& nums) {
-        vector<vector<int>> son;
-        int n = nums.size();
-        vector<int> v = {};
-        son.push_back(v);
+    int countTriplets(vector<int>& arr) {
+        int n = arr.size();
+        vector<int> xor_vec(n + 1, 0);
         for(int i = 0; i < n; ++i){
-            for(auto vec : son){
-                vec.push_back(nums[i]);
-                son.push_back(vec);
-            }
+            xor_vec[i + 1] = xor_vec[i] ^ arr[i];
         }
-        int m = son.size(), ans = 0;
-        for(int i = 0; i < m; ++i){
-            int xo = 0, len = son[i].size();
-            for(int j = 0; j < len; ++j){
-                xo = xo ^ son[i][j];
+        int ans = 0;
+        for(int i = 0; i < n; ++i){
+            for(int j = i + 1; j < n; ++j){
+                if((xor_vec[j + 1] ^ xor_vec[i]) == 0){
+                    ans += j - i;
+                }
             }
-            ans += xo;
         }
         return ans;
     }
@@ -69,7 +64,7 @@ int main() {
     string str2 = "aba";
     cout << max(str1, str2) << endl;
     vector<vector<int>> a = { {3,4},{1,100},{2,2},{5,5} };
-    vector<int> b = { 1,3};
+    vector<int> b = { 2, 3, 1, 6, 7 };
     vector<int> b_ = { 9,3,5,1,7,4 };
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
@@ -100,5 +95,5 @@ int main() {
     string st = ", 234 ;";
     cout << atoi(st.c_str()) << endl;
     //cout << so.func(4, a) << endl;
-    so.subsetXORSum(b);
+    so.countTriplets(b);
 }
