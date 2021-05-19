@@ -40,21 +40,27 @@ struct TreeNode {
 
 class Solution {
 public:
-    int countTriplets(vector<int>& arr) {
-        int n = arr.size();
-        vector<int> xor_vec(n + 1, 0);
-        for(int i = 0; i < n; ++i){
-            xor_vec[i + 1] = xor_vec[i] ^ arr[i];
-        }
-        int ans = 0;
-        for(int i = 0; i < n; ++i){
-            for(int j = i + 1; j < n; ++j){
-                if((xor_vec[j + 1] ^ xor_vec[i]) == 0){
-                    ans += j - i;
-                }
+    int kthLargestValue(vector<vector<int>>& matrix, int k) {
+        vector<int> vec;
+        int m = matrix.size(), n = matrix[0].size();
+        vector<vector<int>> xor_vec(m + 1, vector<int>(n + 1, 0));
+        for(int i = 0; i < m; ++i){
+            for(int j = 0; j < n; ++j){
+                xor_vec[i + 1][j + 1] = xor_vec[i][j + 1] ^ xor_vec[i + 1][j] ^ matrix[i][j];
             }
         }
-        return ans;
+        for(int i = 1; i <= m; ++i){
+            for(int j = 1; j <= n; ++j){
+                vec.push_back(xor_vec[i][j]);
+            }
+        }
+        sort(vec.begin(), vec.end());
+        int pos = m * n;
+        while(k > 0){
+            --pos;
+            --k;
+        }
+        return vec[pos];
     }
 };
 
@@ -63,7 +69,7 @@ int main() {
     string str1 = "ac";
     string str2 = "aba";
     cout << max(str1, str2) << endl;
-    vector<vector<int>> a = { {3,4},{1,100},{2,2},{5,5} };
+    vector<vector<int>> a = { {5,2},{1,6}};
     vector<int> b = { 2, 3, 1, 6, 7 };
     vector<int> b_ = { 9,3,5,1,7,4 };
 
@@ -95,5 +101,5 @@ int main() {
     string st = ", 234 ;";
     cout << atoi(st.c_str()) << endl;
     //cout << so.func(4, a) << endl;
-    so.countTriplets(b);
+    so.kthLargestValue(a, 4);
 }
