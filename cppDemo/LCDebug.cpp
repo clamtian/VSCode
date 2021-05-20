@@ -38,29 +38,26 @@ struct TreeNode {
 
 
 
+bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
+    if(p1.second == p2.second){
+        return p1.first > p2.first;
+    }
+    return p1.second > p2.second;
+}
 class Solution {
 public:
-    int kthLargestValue(vector<vector<int>>& matrix, int k) {
-        vector<int> vec;
-        int m = matrix.size(), n = matrix[0].size();
-        vector<vector<int>> xor_vec(m + 1, vector<int>(n + 1, 0));
-        for(int i = 0; i < m; ++i){
-            for(int j = 0; j < n; ++j){
-                xor_vec[i + 1][j + 1] = xor_vec[i][j + 1] ^ xor_vec[i + 1][j] ^ matrix[i][j];
-            }
+    vector<string> topKFrequent(vector<string>& words, int k) {
+        unordered_map<string, int> m;
+        for(string& word : words){
+            ++m[word];
         }
-        for(int i = 1; i <= m; ++i){
-            for(int j = 1; j <= n; ++j){
-                vec.push_back(xor_vec[i][j]);
-            }
+        vector<pair<string, int>> vec(m.begin(), m.end());
+        sort(vec.begin(), vec.end(), compare);
+        vector<string> res;
+        for(int i = 0; i < k; ++i){
+            res.push_back(vec[i].first);
         }
-        sort(vec.begin(), vec.end());
-        int pos = m * n;
-        while(k > 0){
-            --pos;
-            --k;
-        }
-        return vec[pos];
+        return res;
     }
 };
 
@@ -91,7 +88,7 @@ int main() {
     string s = "cegfxvulsxakw";
     char ch = 49 + '0';
     vector<bool> is(2, true);
-    vector<string> str = { "leet", "code" };
+    vector<string> str = { "i", "love", "leetcode", "i", "love", "coding" };
     vector<vector<string>> matrix = { {"1", "0", "1", "0", "0"},
                                       {"1", "0", "1", "1", "1"},
                                       {"1", "1", "1", "1", "1"},
@@ -99,7 +96,10 @@ int main() {
 
     Solution so;
     string st = ", 234 ;";
+    string s1 = "i";
+    string s2 = "love";
+    if(s1 < s2) cout << 666 << endl;
     cout << atoi(st.c_str()) << endl;
     //cout << so.func(4, a) << endl;
-    so.kthLargestValue(a, 4);
+    so.topKFrequent(str, 2);
 }
