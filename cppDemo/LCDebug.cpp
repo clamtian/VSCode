@@ -46,16 +46,33 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 }
 class Solution {
 public:
-    vector<string> topKFrequent(vector<string>& words, int k) {
-        unordered_map<string, int> m;
-        for(string& word : words){
-            ++m[word];
+    vector<int> maximizeXor(vector<int>& nums, vector<vector<int>>& queries) {
+        int n = queries.size();
+        vector<int> res(n, -1), tmp(n, 0);
+        unordered_map<int, set<int>> m;
+        for(int k = 30; k >= 0; --k){
+            for(int num : nums){
+                m[num].insert(num >> k);
+            }
+            for(int i = 0; i < n; ++i){
+                if((queries[i][0] >> k) > 0 || (queries[i][1] >> k) > 0){
+                    int target = (tmp[i] * 2 + 1) ^ (queries[i][0] >> k);
+                    int l = queries[i][1] >> k;
+                    if(m.find(target) != m.end() && *(m[target].begin()) <= queries[i][1]){
+                        tmp[i] = tmp[i] * 2 + 1;
+                    }else{
+                        tmp[i] = tmp[i] * 2;
+                    }
+                }
+            }
+            m.clear();
         }
-        vector<pair<string, int>> vec(m.begin(), m.end());
-        sort(vec.begin(), vec.end(), compare);
-        vector<string> res;
-        for(int i = 0; i < k; ++i){
-            res.push_back(vec[i].first);
+        unordered_set<int> s1(nums.begin(), nums.end());
+        for(int i = 0; i < n; ++i){
+            int val = queries[i][0] ^ tmp[i];
+            if(s1.find(val) != s1.end()){
+                res[i] = tmp[i];
+            }
         }
         return res;
     }
@@ -66,9 +83,9 @@ int main() {
     string str1 = "ac";
     string str2 = "aba";
     cout << max(str1, str2) << endl;
-    vector<vector<int>> a = { {5,2},{1,6}};
-    vector<int> b = { 2, 3, 1, 6, 7 };
-    vector<int> b_ = { 9,3,5,1,7,4 };
+    vector<vector<int>> a = { {536870912,262144}};
+    vector<int> b = { };
+     vector<int> b_ = { 9,3,5,1,7,4 };
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
                                {'0', '1', '0'},
@@ -96,10 +113,11 @@ int main() {
 
     Solution so;
     string st = ", 234 ;";
-    string s1 = "i";
+    string s1 = "011010";
     string s2 = "love";
     if(s1 < s2) cout << 666 << endl;
     cout << atoi(st.c_str()) << endl;
     //cout << so.func(4, a) << endl;
-    so.topKFrequent(str, 2);
+    double ss = 2.01;
+    so.maximizeXor(b, a);
 }
