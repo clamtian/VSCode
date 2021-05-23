@@ -72,7 +72,7 @@ int main()
 
     string s = "";
     int num = 1;
-    cout << bitset<32>(8 >> 1) << endl;
+    cout << bitset<32>(214004) << endl;
 
     return 1;
 }
