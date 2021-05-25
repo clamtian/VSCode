@@ -62,17 +62,11 @@ int f(int m, int n){
 }
 int main()
 {
-    vector<vector<int>> a = { { 3, 4, 5, 2 },
-                              { 1, 1, 4, 5 },
-                              { 2, 2, 1, 2 },
-                              { 5, 5, 5, 5 },
-                              { 5, 5, 5, 5 },
-                              { 5, 5, 5, 5 } };
-    string res('a', 3);
-
-    string s = "";
-    int num = 1;
-    cout << bitset<32>(214004) << endl;
+    vector<int> a = {3, 4, 5, 2 };
+    vector<int> b = {3, 4, 5, 1, 2 };
+    double c = inner_product(a.begin(), a.end(), b.begin(), 0.);
+    auto it = a.begin();
+    generate(a.begin(), a.end(), [&it](){ return (*it) * (*(it++)); });
 
     return 1;
 }
