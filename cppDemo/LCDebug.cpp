@@ -47,32 +47,38 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 class Solution {
 public:
     vector<int> maximizeXor(vector<int>& nums, vector<vector<int>>& queries) {
-        int n = queries.size();
-        vector<int> res(n, -1), tmp(n, 0);
-        unordered_map<int, set<int>> m;
+        int n = queries.size(), m = nums.size();
+        vector<int> vec(n, 0);
+        unordered_set<int> s;
+        sort(nums.begin(), nums.end());
+        for(int i = 0; i < n; ++i){
+            queries[i].push_back(i);
+        }
+        sort(queries.begin(), queries.end(), [](auto& a, auto& b){ return a[1] < b[1]; });
+
         for(int k = 30; k >= 0; --k){
-            for(int num : nums){
-                m[num].insert(num >> k);
-            }
+            int pos = 0;
             for(int i = 0; i < n; ++i){
-                if((queries[i][0] >> k) > 0 || (queries[i][1] >> k) > 0){
-                    int target = (tmp[i] * 2 + 1) ^ (queries[i][0] >> k);
-                    int l = queries[i][1] >> k;
-                    if(m.find(target) != m.end() && *(m[target].begin()) <= queries[i][1]){
-                        tmp[i] = tmp[i] * 2 + 1;
+                int abort = queries[i][1];
+                while(pos < m && nums[pos] <= abort){
+                    s.insert(nums[pos] >> k);
+                    ++pos;
+                }
+                if(!s.empty()){
+                    int target = vec[i] * 2 + 1;
+                    if(s.find(target ^ (queries[i][0] >> k)) != s.end()){
+                        vec[i] = target;
                     }else{
-                        tmp[i] = tmp[i] * 2;
+                        vec[i] = target - 1;
                     }
+                }else{
+                    vec[i] = -1;
                 }
             }
-            m.clear();
         }
-        unordered_set<int> s1(nums.begin(), nums.end());
+        vector<int> res(n, -1);
         for(int i = 0; i < n; ++i){
-            int val = queries[i][0] ^ tmp[i];
-            if(s1.find(val) != s1.end()){
-                res[i] = tmp[i];
-            }
+            res[queries[i][2]] = vec[i];
         }
         return res;
     }
@@ -83,8 +89,8 @@ int main() {
     string str1 = "ac";
     string str2 = "aba";
     cout << max(str1, str2) << endl;
-    vector<vector<int>> a = { {536870912,262144}};
-    vector<int> b = { };
+    vector<vector<int>> a = { {12,4}, {8,1}, {6,3}};
+    vector<int> b = { 5,2,4,6,6,3 };
      vector<int> b_ = { 9,3,5,1,7,4 };
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
