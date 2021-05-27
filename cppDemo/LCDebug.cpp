@@ -46,41 +46,35 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 }
 class Solution {
 public:
-    vector<int> maximizeXor(vector<int>& nums, vector<vector<int>>& queries) {
-        int n = queries.size(), m = nums.size();
-        vector<int> vec(n, 0);
-        unordered_set<int> s;
-        sort(nums.begin(), nums.end());
-        for(int i = 0; i < n; ++i){
-            queries[i].push_back(i);
+    int stoneGameVIII(vector<int>& stones) {
+        int n = stones.size();
+        vector<int> dp(n + 1, 0);
+        dp[n - 1] = stones[n - 1];
+        for(int i = n - 2; i >= 0; --i){
+            dp[i] = dp[i + 1] + stones[i];
         }
-        sort(queries.begin(), queries.end(), [](auto& a, auto& b){ return a[1] < b[1]; });
-
-        for(int k = 30; k >= 0; --k){
-            int pos = 0;
-            for(int i = 0; i < n; ++i){
-                int abort = queries[i][1];
-                while(pos < m && nums[pos] <= abort){
-                    s.insert(nums[pos] >> k);
-                    ++pos;
-                }
-                if(!s.empty()){
-                    int target = vec[i] * 2 + 1;
-                    if(s.find(target ^ (queries[i][0] >> k)) != s.end()){
-                        vec[i] = target;
-                    }else{
-                        vec[i] = target - 1;
-                    }
-                }else{
-                    vec[i] = -1;
+        int pos = 2, ans = stones[0] + stones[1], sumB = 0;
+        while(pos < n){
+            int target = dp[pos], index = pos;
+            for(int i = pos; i <= n; ++i){
+                if(target >= dp[i]){
+                    index = i;
+                    target = dp[index];
                 }
             }
+            if(index == n) ans += dp[pos] - dp[index];
+            pos = index;
+            target = dp[pos], index = pos;
+            for(int i = pos; i <= n; ++i){
+                if(target <= dp[i]){
+                    index = i;
+                    target = dp[index];
+                }
+            }
+            if(index == n) ans -= dp[pos] - dp[index];
+            pos = index;
         }
-        vector<int> res(n, -1);
-        for(int i = 0; i < n; ++i){
-            res[queries[i][2]] = vec[i];
-        }
-        return res;
+        return ans;
     }
 };
 
@@ -90,7 +84,7 @@ int main() {
     string str2 = "aba";
     cout << max(str1, str2) << endl;
     vector<vector<int>> a = { {12,4}, {8,1}, {6,3}};
-    vector<int> b = { 5,2,4,6,6,3 };
+    vector<int> b = { -1,2,-3,4,-5 };
      vector<int> b_ = { 9,3,5,1,7,4 };
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
@@ -125,5 +119,5 @@ int main() {
     cout << atoi(st.c_str()) << endl;
     //cout << so.func(4, a) << endl;
     double ss = 2.01;
-    so.maximizeXor(b, a);
+    so.stoneGameVIII(b);
 }
