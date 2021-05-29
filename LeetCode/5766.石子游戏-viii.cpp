@@ -9,35 +9,15 @@ class Solution {
 public:
     int stoneGameVIII(vector<int>& stones) {
         int n = stones.size();
-        vector<int> dp(n + 1, 0);
-        dp[n - 1] = stones[n - 1];
-        for(int i = n - 2; i >= 0; --i){
-            dp[i] = dp[i + 1] + stones[i];
+        vector<int> sum(n + 1, 0);
+        for(int i = 0; i < n; ++i){
+            sum[i + 1] = sum[i] + stones[i];
         }
-        int pos = 1, sumA = stones[0], sumB = 0;
-        while(pos < n - 1){
-            int target = dp[pos + 1], index = pos + 1;
-            for(int i = pos + 1; i < n; ++i){
-                if(target >= dp[i]){
-                    index = i;
-                    target = dp[index];
-                }
-            }
-            sumA += dp[pos] - dp[index];
-            if(index < n) sumB += dp[pos] - dp[index];
-            pos = index;
-            target = dp[pos + 1], index = pos + 1;
-            for(int i = pos + 1; i < n; ++i){
-                if(target <= dp[i]){
-                    index = i;
-                    target = dp[index];
-                }
-            }
-            sumB += dp[pos] - dp[index];
-            if(index < n) sumA += dp[pos] - dp[index];
-            pos = index;
+        int ans = sum[n];
+        for(int i = n - 1; i > 1; --i){
+            ans = max(ans, sum[i] - ans);
         }
-        return sumA - sumB;
+        return ans;
     }
 };
 // @lc code=end
