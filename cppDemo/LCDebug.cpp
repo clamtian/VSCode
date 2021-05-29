@@ -48,31 +48,18 @@ class Solution {
 public:
     int stoneGameVIII(vector<int>& stones) {
         int n = stones.size();
-        vector<int> dp(n + 1, 0);
-        dp[n - 1] = stones[n - 1];
-        for(int i = n - 2; i >= 0; --i){
-            dp[i] = dp[i + 1] + stones[i];
+        vector<int> sum(n + 1, 0);
+        for(int i = 0; i < n; ++i){
+            sum[i + 1] = sum[i] + stones[i];
         }
-        int pos = 2, ans = stones[0] + stones[1], sumB = 0;
-        while(pos < n){
-            int target = dp[pos], index = pos;
-            for(int i = pos; i <= n; ++i){
-                if(target >= dp[i]){
-                    index = i;
-                    target = dp[index];
-                }
-            }
-            if(index == n) ans += dp[pos] - dp[index];
-            pos = index;
-            target = dp[pos], index = pos;
-            for(int i = pos; i <= n; ++i){
-                if(target <= dp[i]){
-                    index = i;
-                    target = dp[index];
-                }
-            }
-            if(index == n) ans -= dp[pos] - dp[index];
-            pos = index;
+        return solver(sum, 2);
+    }
+    int solver(vector<int>& sum, int pos){
+        int n = sum.size();
+        if(pos == n - 1) return sum[pos];
+        int ans = sum[pos];
+        for(int i = pos; i < n - 1; ++i){
+            ans = max(ans, sum[i] - solver(sum, i + 1));
         }
         return ans;
     }
@@ -84,8 +71,7 @@ int main() {
     string str2 = "aba";
     cout << max(str1, str2) << endl;
     vector<vector<int>> a = { {12,4}, {8,1}, {6,3}};
-    vector<int> b = { -1,2,-3,4,-5 };
-     vector<int> b_ = { 9,3,5,1,7,4 };
+    vector<int> b = { 7,-6,5,10,5,-2, -6 };
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
                                {'0', '1', '0'},
@@ -119,5 +105,7 @@ int main() {
     cout << atoi(st.c_str()) << endl;
     //cout << so.func(4, a) << endl;
     double ss = 2.01;
-    so.stoneGameVIII(b);
+    int x = so.stoneGameVIII(b);
+
+    return 0;
 }
