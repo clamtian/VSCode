@@ -46,11 +46,8 @@ int main(int argc, char *argv[]){
 
         const char* normal_data = "buaa123456789";
         const char* oob_data = "oob1";
-        sleep(1);
         send(sock, normal_data, strlen(normal_data), 0);
-        sleep(2);
-        send(sock, normal_data, strlen(normal_data), 0);
-        //send(sock, oob_data, strlen(oob_data), MSG_OOB);
+        send(sock, oob_data, strlen(oob_data), MSG_OOB);
         //normal_data = "buaa2";
         //oob_data = "oob2";
         //send(sock, normal_data, strlen(normal_data), 0);
