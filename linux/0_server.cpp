@@ -9,11 +9,17 @@
 #include<netdb.h>
 #include<string.h>
 #include<iostream>
+#include<fcntl.h>
 #define BUF_SIZE 1024
 using namespace std;
 static bool stop = false;
 
-
+int setnonblocking(int fd){
+    int old_option = fcntl(fd, F_GETFL);
+    int new_option = old_option | O_NONBLOCK;
+    fcntl(fd, F_SETFL, new_option);
+    return old_option;
+}
 int main(int argc, char *argv[]){
 
     const char *ip = argv[1];
@@ -34,17 +40,21 @@ int main(int argc, char *argv[]){
     struct sockaddr_in client;
     socklen_t client_addrlength = sizeof(client);
 
+    printf("listening...\n");
     int connfd = accept(sock, (struct sockaddr*)&client, &client_addrlength);
-
     if(connfd < 0){
         printf("errno is : %d\n", errno);
     }else{
-        close(STDOUT_FILENO);
-        dup(connfd);
-        //char buffer[BUF_SIZE];
-        //memset(buffer, 'a', BUF_SIZE);
-        //send(connfd, buffer, BUF_SIZE, 0);
-        printf("buaa666\n");
+        char remote[INET_ADDRSTRLEN];
+        printf("connected with ip : %s and port : %d.\n", inet_ntop(AF_INET, &client.sin_addr, remote, INET_ADDRSTRLEN), ntohs(client.sin_port));
+        
+        char buffer[BUF_SIZE];
+        memset(buffer, '\0', BUF_SIZE);
+        ret = recv(connfd, buffer, BUF_SIZE - 1, 0);
+        printf("got %d bytes of normal data : %s\n", ret, buffer);
+        memset(buffer, '\0', BUF_SIZE);
+        ret = recv(connfd, buffer, BUF_SIZE - 1, MSG_OOB);
+        printf("got %d bytes of oob data : %s\n", ret, buffer);
         close(connfd);
     }
     close(sock);

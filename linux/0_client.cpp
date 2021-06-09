@@ -8,11 +8,17 @@
 #include<stdio.h>
 #include<string.h>
 #include<iostream>
+#include<fcntl.h>
 #define BUF_SIZE 1024
 using namespace std;
 static bool stop = false;
 
-
+int setnonblocking(int fd){
+    int old_option = fcntl(fd, F_GETFL);
+    int new_option = old_option | O_NONBLOCK;
+    fcntl(fd, F_SETFL, new_option);
+    return old_option;
+}
 int main(int argc, char *argv[]){
 
     if(argc <= 2){
@@ -31,20 +37,23 @@ int main(int argc, char *argv[]){
     
     assert(sock >= 0);
     if(connect(sock, (struct sockaddr*)&server_address, sizeof(server_address)) < 0){
-        printf("connection failed\n");
+        printf("connection failed, errno is : %d\n", errno);
     }else{
         char remote[INET_ADDRSTRLEN];
         printf("client connected with ip : %s and port : %d.\n", 
             inet_ntop(AF_INET, &server_address.sin_addr, remote, INET_ADDRSTRLEN), ntohs(server_address.sin_port));
         
 
-        const char* normal_data = "buaa1";
+        const char* normal_data = "buaa123456789";
         const char* oob_data = "oob1";
+        sleep(1);
         send(sock, normal_data, strlen(normal_data), 0);
-        send(sock, oob_data, strlen(oob_data), MSG_OOB);
-        normal_data = "buaa2";
-        oob_data = "oob2";
+        sleep(2);
         send(sock, normal_data, strlen(normal_data), 0);
+        //send(sock, oob_data, strlen(oob_data), MSG_OOB);
+        //normal_data = "buaa2";
+        //oob_data = "oob2";
+        //send(sock, normal_data, strlen(normal_data), 0);
         //sleep(2);
         //send(sock, oob_data, strlen(oob_data), MSG_OOB);
         /*
