@@ -1,3 +1,21 @@
+#include <string.h>
+#include <vector>
+#include <string>
+#include <list>
+#include <map> 
+#include <vector> 
+#include <algorithm>
+#include <set>
+#include <iostream>
+#include <stack>
+#include <unordered_map>
+#include <unordered_set>
+#include <numeric>
+#include <queue>
+#include <sstream> 
+
+using namespace std;
+
 class Solution {
 public:
     int coins1(vector<int>& coins, int aim){
@@ -13,7 +31,7 @@ public:
             ans = aim == 0 ? 1 : 0;
         }else{
             for(int i = 0; i * coins[pos] <= aim; ++i){
-                int value = map[pos + 1][aim - i * coins[pos]]
+                int value = map[pos + 1][aim - i * coins[pos]];
                 if(value != -1){
                     ans += value;
                 }else{
