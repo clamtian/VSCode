@@ -16,7 +16,6 @@
 #include <sstream> 
 
 using namespace std;
-//int a[] = { 1, 2, 2, 3, 1, 4, 2 };
 
 struct ListNode {
     int val;
@@ -36,8 +35,6 @@ struct TreeNode {
     
 };
 
-
-
 bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
     if(p1.second == p2.second){
         return p1.first > p2.first;
@@ -46,35 +43,48 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 }
 class Solution {
 public:
-    int profitableSchemes(int n, int minProfit, vector<int>& group, vector<int>& profit) {
-        int m = group.size();
-        int tot = accumulate(profit.begin(), profit.end(), 0);
-        int dp[n + 1][tot + 1][m + 1];
-        for(int i = 0; i <= n; ++i){
-            for(int j = 0; j <= tot; ++j){
-                for(int k = 0; k <= m; ++k){
-                    cout << i << endl;
-                        cout << j << endl;
-                        cout << k << endl;
-                    dp[i][j][k] = j == 0 ? 1 : 0;
+    int dp[2][29][29][29];
+    vector<int> earliestAndLatest(int n, int a, int b) {
+        vector<int> res = { 0, 0 };
+        res[0] = dfs(n, a, b, 0);
+        res[1] = dfs(n, a, b, 1);
+        return res;
+    }
+    int dfs(int n, int a, int b, int flag){
+        if(dp[flag][n][a][b] != 0) return dp[flag][n][a][b];
+        if(a > b) swap(a, b);
+        int tot = (n + 1) / 2, mid = n / 2 + 1;;
+        int ans = 0;
+        if(flag == 0) ans = INT_MAX;
+        if(a < mid && (b < mid || b == mid && n % 2 == 1)){
+            for(int i = 0; i < a; ++i){
+                for(int j = 0; j < b - a; ++j){
+                    if(flag == 0) ans = min(ans, dfs(tot, i + 1, i + j + 2, 0));
+                    else ans = max(ans, dfs(tot, i + 1, i + j + 2, 1));
                 }
             }
-        }
-        for(int i = 1; i <= n; ++i){
-            for(int j = 1; j <= tot; ++j){
-                for(int k = 1; k <= m; ++k){
-                    dp[i][j][k] = dp[i][j][k - 1];
-                    if(i >= group[k - 1] && j >= profit[k - 1]){
-                        dp[i][j][k] += dp[i - group[k - 1]][j - profit[k - 1]][k - 1];
+            ans += 1;
+        }else if(a >= mid && b > mid){
+            if(flag == 0) ans = dfs(n, n + 1 - b, n + 1 - a, 0);
+            else ans = dfs(n, n + 1 - b, n + 1 - a, 1);
+        }else if(a < mid && b >= mid){
+            if(b == n + 1 - a){
+                ans = 1;
+            }else if(b > n + 1 - a){
+                if(flag == 0) ans = dfs(n, n + 1 - b, n + 1 - a, 0);
+                else ans = dfs(n, n + 1 - b, n + 1 - a, 1);
+            }else{
+                for(int i = 0; i < a; ++i){
+                    for(int j = 0; j < n + 1 - b - a; ++j){
+                        if(flag == 0) ans = min(tot, dfs(mid, i + 1, i + j + ((n - 2 * (n + 1 - b) + 1) / 2 + 2), 0));
+                        else ans = max(ans, dfs(tot, i + 1, i + j + ((n - 2 * (n + 1 - b) + 1) / 2 + 2), 1));
                     }
                 }
+                ans += 1;
             }
         }
-        int ans = 0;
-        for(int j = minProfit; j <= tot; ++j){
-            ans += dp[n][j][m];
-        }
-        return ans;
+        dp[flag][n][a][b] = ans;
+        return dp[flag][n][a][b];
     }
 };
 
@@ -83,8 +93,8 @@ int main() {
     string str1 = "ac";
     string str2 = "aba";
     cout << max(str1, str2) << endl;
-    vector<vector<int>> a = { {12,4}, {8,1}, {6,3}};
-    vector<int> b = { 82,7,18,34,1,3,83,56,50,34,39,38,76,92,71,2,6,74,1,82,22,73,88,98,6,71,6,26,100,75,57,88,43,16,22,89,7,9,78,97,22,87,34,81,74,56,49,94,87,71,59,6,20,66,64,37,2,42,30,87,73,16,39,87,28,9,95,78,43,59,87,78,2,93,7,22,21,59,68,67,65,63,78,20,82,35,86 };
+    vector<vector<int>> a = { {12}, {9,11},{5,7,10,14}};
+    vector<int> b = { 3,5,8,8,8,10,11,12 };
     vector<int> b_ = { 45,57,38,64,52,92,31,57,31,52,3,12,93,8,11,60,55,92,42,27,40,10,77,53,8,34,87,39,8,35,28,70,32,97,88,54,82,54,54,10,78,23,82,52,10,49,8,36,9,52,81,26,5,2,30,39,89,62,39,100,67,33,86,22,49,15,94,59,47,41,45,17,99,87,77,48,22,77,82,85,97,66,3,38,49,60,66 };
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
@@ -119,7 +129,7 @@ int main() {
     cout << atoi(st.c_str()) << endl;
     //cout << so.func(4, a) << endl;
     double ss = 2.01;
-    int x = so.profitableSchemes(95,53,b,b_);
+    so.earliestAndLatest(4,1,3);
 
     return 0;
 }
