@@ -43,48 +43,65 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 }
 class Solution {
 public:
-    int dp[2][29][29][29];
-    vector<int> earliestAndLatest(int n, int a, int b) {
-        vector<int> res = { 0, 0 };
-        res[0] = dfs(n, a, b, 0);
-        res[1] = dfs(n, a, b, 1);
-        return res;
-    }
-    int dfs(int n, int a, int b, int flag){
-        if(dp[flag][n][a][b] != 0) return dp[flag][n][a][b];
-        if(a > b) swap(a, b);
-        int tot = (n + 1) / 2, mid = n / 2 + 1;;
-        int ans = 0;
-        if(flag == 0) ans = INT_MAX;
-        if(a < mid && (b < mid || b == mid && n % 2 == 1)){
-            for(int i = 0; i < a; ++i){
-                for(int j = 0; j < b - a; ++j){
-                    if(flag == 0) ans = min(ans, dfs(tot, i + 1, i + j + 2, 0));
-                    else ans = max(ans, dfs(tot, i + 1, i + j + 2, 1));
-                }
-            }
-            ans += 1;
-        }else if(a >= mid && b > mid){
-            if(flag == 0) ans = dfs(n, n + 1 - b, n + 1 - a, 0);
-            else ans = dfs(n, n + 1 - b, n + 1 - a, 1);
-        }else if(a < mid && b >= mid){
-            if(b == n + 1 - a){
-                ans = 1;
-            }else if(b > n + 1 - a){
-                if(flag == 0) ans = dfs(n, n + 1 - b, n + 1 - a, 0);
-                else ans = dfs(n, n + 1 - b, n + 1 - a, 1);
+    int minOperationsToFlip(string s) {
+        stack<pair<int, int>> s1;
+        stack<char> s2;
+        int n = s.size(), pos = 0;
+        while(pos < n){
+            if(s[pos] == '(' || s[pos] == '&' || s[pos] == '|'){
+                s2.push(s[pos]);
             }else{
-                for(int i = 0; i < a; ++i){
-                    for(int j = 0; j < n + 1 - b - a; ++j){
-                        if(flag == 0) ans = min(tot, dfs(mid, i + 1, i + j + ((n - 2 * (n + 1 - b) + 1) / 2 + 2), 0));
-                        else ans = max(ans, dfs(tot, i + 1, i + j + ((n - 2 * (n + 1 - b) + 1) / 2 + 2), 1));
-                    }
+                if(s[pos] == '1'){
+                    pair<int, int> p = { 1, 0 };
+                    s1.push(p);
+                }else if(s[pos] == '0'){
+                    pair<int, int> p = { 0, 1 };
+                    s1.push(p);
                 }
-                ans += 1;
+                if(s2.size() > 0 && s2.top() != '('){
+                    char op = s2.top();
+                    s2.pop();
+                    auto p1 = s1.top();
+                    s1.pop();
+                    auto p2 = s1.top();
+                    s1.pop();
+                    auto p = cal(op, p1, p2);
+                    s1.push(p);
+                }
             }
+            ++pos;
         }
-        dp[flag][n][a][b] = ans;
-        return dp[flag][n][a][b];
+        while(s2.size() > 0){
+            char op = s2.top();
+            s2.pop();
+            auto p1 = s1.top();
+            s1.pop();
+            auto p2 = s1.top();
+            s1.pop();
+            auto p = cal(op, p1, p2);
+            s1.push(p);
+        }
+        auto p = s1.top();
+        return p.first == 0 ? p.second : p.first;
+    }
+    pair<int, int> cal(char op, pair<int, int>& p1, pair<int, int>& p2){
+        pair<int, int> p = { INT_MAX, INT_MAX };
+        if(op == '|'){
+            p.first = min(p.first, p1.first + p2.first);
+            p.first = min(p.first, p1.second + p2.first + 1);
+            p.first = min(p.first, p1.first + p2.second + 1);
+            p.second = min(p.second, p1.second + p2.second);
+            p.second = min(p.second, p1.second + p2.first);
+            p.second = min(p.second, p1.first + p2.second);
+        }else if(op == '&'){
+            p.first = min(p.first, p1.first + p2.second);
+            p.first = min(p.first, p1.second + p2.first);
+            p.first = min(p.first, p1.first + p2.first);
+            p.second = min(p.second, p1.second + p2.second);
+            p.second = min(p.second, p1.second + p2.first + 1);
+            p.second = min(p.second, p1.first + p2.second + 1);
+        }
+        return p;
     }
 };
 
@@ -129,7 +146,7 @@ int main() {
     cout << atoi(st.c_str()) << endl;
     //cout << so.func(4, a) << endl;
     double ss = 2.01;
-    so.earliestAndLatest(4,1,3);
+    so.minOperationsToFlip("1|(0&(1))");
 
     return 0;
 }
