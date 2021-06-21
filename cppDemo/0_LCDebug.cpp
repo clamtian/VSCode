@@ -1,4 +1,5 @@
 #include <string.h>
+#include <math.h>
 #include <vector>
 #include <string>
 
@@ -15,8 +16,10 @@
 #include <queue>
 #include <sstream> 
 
+
 using namespace std;
 
+typedef long long LL;
 struct ListNode {
     int val;
     ListNode* next;
@@ -43,67 +46,51 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 }
 class Solution {
 public:
-    int minOperationsToFlip(string s) {
-        stack<pair<int, int>> s1;
-        stack<char> s2;
-        int n = s.size(), pos = 0;
-        while(pos < n){
-            if(s[pos] == '(' || s[pos] == '&' || s[pos] == '|'){
-                s2.push(s[pos]);
-            }else{
-                if(s[pos] == '1'){
-                    pair<int, int> p = { 1, 0 };
-                    s1.push(p);
-                }else if(s[pos] == '0'){
-                    pair<int, int> p = { 0, 1 };
-                    s1.push(p);
-                }
-                if(s2.size() > 0 && s2.top() != '('){
-                    char op = s2.top();
-                    s2.pop();
-                    auto p1 = s1.top();
-                    s1.pop();
-                    auto p2 = s1.top();
-                    s1.pop();
-                    auto p = cal(op, p1, p2);
-                    s1.push(p);
+    vector<string> readBinaryWatch(int turnedOn) {
+        vector<string> res;
+        for(int i = 0; i <= turnedOn; ++i){
+            vector<string> hour = getHour(i);
+            vector<string> minute;
+            getMinute(turnedOn - i, 0, 5, minute);
+            for(auto& h : hour){
+                for(auto& m : hour){
+                    string time = h + ":" + m;
+                    res.push_back(time);
                 }
             }
-            ++pos;
         }
-        while(s2.size() > 0){
-            char op = s2.top();
-            s2.pop();
-            auto p1 = s1.top();
-            s1.pop();
-            auto p2 = s1.top();
-            s1.pop();
-            auto p = cal(op, p1, p2);
-            s1.push(p);
-        }
-        auto p = s1.top();
-        return p.first == 0 ? p.second : p.first;
+        return res;
     }
-    pair<int, int> cal(char op, pair<int, int>& p1, pair<int, int>& p2){
-        pair<int, int> p = { INT_MAX, INT_MAX };
-        if(op == '|'){
-            p.first = min(p.first, p1.first + p2.first);
-            p.first = min(p.first, p1.second + p2.first + 1);
-            p.first = min(p.first, p1.first + p2.second + 1);
-            p.second = min(p.second, p1.second + p2.second);
-            p.second = min(p.second, p1.second + p2.first);
-            p.second = min(p.second, p1.first + p2.second);
-        }else if(op == '&'){
-            p.first = min(p.first, p1.first + p2.second);
-            p.first = min(p.first, p1.second + p2.first);
-            p.first = min(p.first, p1.first + p2.first);
-            p.second = min(p.second, p1.second + p2.second);
-            p.second = min(p.second, p1.second + p2.first + 1);
-            p.second = min(p.second, p1.first + p2.second + 1);
+    void getMinute(int n, int m, int b, vector<string>& minute){
+        if(n == 0){
+            if(m < 10){
+                minute.push_back("0" + to_string(m));
+            }else if(m < 60){
+                minute.push_back(to_string(m));
+            }
+            return;
         }
-        return p;
+        if(b == -1) return;
+        getMinute(n - 1, m ^ (1 << b), b - 1, minute);
+        getMinute(n, m, b - 1, minute);
+    }
+    vector<string> getHour(int n){
+        vector<string> res;
+        if(n == 0){
+            res.push_back("0");
+        }else if(n == 1){
+            res.push_back("1");
+            res.push_back("2");
+            res.push_back("4");
+            res.push_back("8");
+        }else if(n == 3){
+            res.push_back("7");
+            res.push_back("11");
+        }
+        return res;
     }
 };
+
 
 int main() {
 
@@ -129,24 +116,17 @@ int main() {
     ListNode* head = &x5;
 
     string t = "alex";
-    string s = "cegfxvulsxakw";
+    string s = "ababaab";
     char ch = 49 + '0';
     vector<bool> is(2, true);
-    vector<string> str = { "i", "love", "leetcode", "i", "love", "coding" };
+    vector<string> str = { "ab", "ba", "ba" };
     vector<vector<string>> matrix = { {"1", "0", "1", "0", "0"},
                                       {"1", "0", "1", "1", "1"},
                                       {"1", "1", "1", "1", "1"},
                                       {"1", "0", "0", "1", "0"} };
 
     Solution so;
-    string st = ", 234 ;";
-    string s1 = "011010";
-    string s2 = "love";
-    if(s1 < s2) cout << 666 << endl;
-    cout << atoi(st.c_str()) << endl;
-    //cout << so.func(4, a) << endl;
-    double ss = 2.01;
-    so.minOperationsToFlip("1|(0&(1))");
+    so.readBinaryWatch(2);
 
     return 0;
 }
