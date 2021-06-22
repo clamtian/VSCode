@@ -20,6 +20,7 @@
 using namespace std;
 
 typedef long long LL;
+int MOD = 1e9 + 7;
 struct ListNode {
     int val;
     ListNode* next;
@@ -46,47 +47,66 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 }
 class Solution {
 public:
-    vector<string> readBinaryWatch(int turnedOn) {
-        vector<string> res;
-        for(int i = 0; i <= turnedOn; ++i){
-            vector<string> hour = getHour(i);
-            vector<string> minute;
-            getMinute(turnedOn - i, 0, 5, minute);
-            for(auto& h : hour){
-                for(auto& m : hour){
-                    string time = h + ":" + m;
-                    res.push_back(time);
+    vector<int> pathsWithMaxScore(vector<string>& board) {
+        vector<int> res = { 0, 0 };
+        int n = board.size();
+        vector<vector<LL>> val(n, vector<LL>(n, 0));
+        vector<vector<LL>> path(n, vector<LL>(n, 0));
+        for(int i = n - 2; i >= 0; --i){
+            if(board[i][n - 1] != 'X'){
+                val[i][n - 1] = val[i + 1][n - 1] + (board[i][n - 1] - '1');
+                path[i][n - 1] = 1;
+            }else{
+                for(; i >= 0; --i){
+                    val[i][n - 1] = -1;
+                    path[i][n - 1] = 0;
+                }
+            }     
+        }
+        for(int j = n - 2; j >= 0; --j){
+            if(board[n - 1][j] != 'X'){
+                val[n - 1][j] = val[n - 1][j + 1] + (board[n - 1][j] - '1');
+                path[n - 1][j] = 1;
+            }else{
+                for(; j >= 0; --j){
+                    val[n - 1][j] = -1;
+                    path[n - 1][j] = 0;
+                }
+            }     
+        }
+        for(int i = n - 2; i >= 0; --i){
+            for(int j = n - 2; j >= 0; --j){
+                if(board[i][j] != 'X'){
+                    if(path[i + 1][j] > 0){
+                        val[i][j] = val[i + 1][j];
+                        path[i][j] = path[i + 1][j];
+                    }
+                    if(path[i][j + 1] > 0){
+                        if(val[i][j + 1] > val[i][j]){
+                            val[i][j] = val[i][j + 1];
+                            path[i][j] = path[i][j + 1];
+                        }else if(val[i][j + 1] == val[i][j]){
+                            path[i][j] += path[i][j + 1];
+                        }
+                    }
+                    if(path[i + 1][j + 1] > 0){
+                        if(val[i + 1][j + 1] > val[i][j]){
+                            val[i][j] = val[i  +1][j + 1];
+                            path[i][j] = path[i + 1][j + 1];
+                        }else if(val[i + 1][j + 1] == val[i][j]){
+                            path[i][j] += path[i + 1][j + 1];
+                        }
+                    }
+                    if(board[i][j] != 'E') val[i][j] += (board[i][j] - '1');
+                }else if(board[i][j] != 'E'){
+                    val[i][j] = -1;
+                    path[i][j] = 0;
                 }
             }
         }
-        return res;
-    }
-    void getMinute(int n, int m, int b, vector<string>& minute){
-        if(n == 0){
-            if(m < 10){
-                minute.push_back("0" + to_string(m));
-            }else if(m < 60){
-                minute.push_back(to_string(m));
-            }
-            return;
-        }
-        if(b == -1) return;
-        getMinute(n - 1, m ^ (1 << b), b - 1, minute);
-        getMinute(n, m, b - 1, minute);
-    }
-    vector<string> getHour(int n){
-        vector<string> res;
-        if(n == 0){
-            res.push_back("0");
-        }else if(n == 1){
-            res.push_back("1");
-            res.push_back("2");
-            res.push_back("4");
-            res.push_back("8");
-        }else if(n == 3){
-            res.push_back("7");
-            res.push_back("11");
-        }
+        if(path[0][0] == 0) return res;
+        res[0] = val[0][0] % MOD;
+        res[1] = path[0][0] % MOD;
         return res;
     }
 };
@@ -119,14 +139,14 @@ int main() {
     string s = "ababaab";
     char ch = 49 + '0';
     vector<bool> is(2, true);
-    vector<string> str = { "ab", "ba", "ba" };
+    vector<string> str = { "E23", "2X2", "12S" };
     vector<vector<string>> matrix = { {"1", "0", "1", "0", "0"},
                                       {"1", "0", "1", "1", "1"},
                                       {"1", "1", "1", "1", "1"},
                                       {"1", "0", "0", "1", "0"} };
 
     Solution so;
-    so.readBinaryWatch(2);
+    so.pathsWithMaxScore(str);
 
     return 0;
 }
