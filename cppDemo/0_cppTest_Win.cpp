@@ -21,28 +21,10 @@ using namespace std;
 
 int main()
 {
-    string data_file = "./inputTest.txt";
-    ifstream infile(data_file.c_str());
-	if (!infile) {
-		cout << "open nas file failure !" << endl;
-		exit(0);
-	}
-
-	string line;
-
-	//get TrianglesNum
-	string str;
-	getline(infile, line);
-	stringstream sin(line);
-    int num = 0;
-    while(sin){
-        sin >> str;
-        if(str == "ss_prop1"){
-            sin >> num;
-            cout << num << endl;
-            sin >> num; 
-            sin >> num; 
-        }
+    double x = 1.;
+    if(x == 1){
+        cout << 666 << endl;
     }
+    
     return 1;
 }
