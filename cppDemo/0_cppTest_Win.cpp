@@ -21,10 +21,8 @@ using namespace std;
 
 int main()
 {
-    double x = 1.;
-    if(x == 1){
-        cout << 666 << endl;
-    }
+    int n = stoi("0000");
+    cout << n << endl;
     
     return 1;
 }
