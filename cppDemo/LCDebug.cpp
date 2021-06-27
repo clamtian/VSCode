@@ -46,20 +46,23 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 }
 class Solution {
 public:
-    int stoneGameVIII(vector<int>& stones) {
-        int n = stones.size();
-        vector<int> sum(n + 1, 0);
-        for(int i = 0; i < n; ++i){
-            sum[i + 1] = sum[i] + stones[i];
+    long long wonderfulSubstrings(string word) {
+        int n = word.size();
+        vector<unordered_map<int, int>> dp(n);
+        dp[0][1 << (word[0] - 'a' + 1)] = 1;
+        for(int i = 1; i < n; ++i){
+            for(auto& p : dp[i - 1]){
+                dp[i][p.first ^ (1 << (word[i] - 'a' + 1))] = p.second;
+            }
+            dp[i][1 << (word[i] - 'a' + 1)] += 1;
         }
-        return solver(sum, 2);
-    }
-    int solver(vector<int>& sum, int pos){
-        int n = sum.size();
-        if(pos == n - 1) return sum[pos];
-        int ans = sum[pos];
-        for(int i = pos; i < n - 1; ++i){
-            ans = max(ans, sum[i] - solver(sum, i + 1));
+        long long ans = 0;
+        for(auto& m : dp){
+            for(int k = 0; k <= 10; ++k){
+                if(m.find(1 << k) != m.end()){
+                    ans += m[1 << k];
+                }
+            }
         }
         return ans;
     }
@@ -70,8 +73,9 @@ int main() {
     string str1 = "ac";
     string str2 = "aba";
     cout << max(str1, str2) << endl;
-    vector<vector<int>> a = { {12,4}, {8,1}, {6,3}};
-    vector<int> b = { 7,-6,5,10,5,-2, -6 };
+    vector<vector<int>> a = { {5,1,3,1},{9,3,3,1},{1,3,3,8}};
+    vector<int> b = { 3,1,0};
+    vector<int> b_ = { 70,31,83,15,32,67,98,65,56,48,38,90,5 };
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
                                {'0', '1', '0'},
@@ -105,7 +109,7 @@ int main() {
     cout << atoi(st.c_str()) << endl;
     //cout << so.func(4, a) << endl;
     double ss = 2.01;
-    int x = so.stoneGameVIII(b);
+    so.wonderfulSubstrings("aabb");
 
     return 0;
 }
