@@ -19,7 +19,7 @@ using namespace std;
 
 /*
 * 二进制状态压缩
-* 集合A、B，元素c --> int A,B   c = 0 ~ 31
+* 非重复集合A、B，元素c --> int A,B   c = 0 ~ 31
 * A中插入c
   A |= (1<<c)
 * A中去除c
