@@ -64,8 +64,74 @@ boot.S主要是将处理器从实模式转换到32位的保护模式，因为只
 ```
 >在保护模式下，段式寻址可用 xxxx:yyyyyyyy 表示。其中xxxx表示索引，也就是段选择子，是 16 位的。 yyyyyyyy 是偏移量，是 32 位的.分段机制是利用一个称作段选择子的偏移量到全局描述符表中找到需要的段描述符，而这个段描述符中就存放着真正的段的物理首地址，然后再加上偏移地址量便得到了最后的物理地址。需要指出的是，在 32 位平台上，段物理首地址和偏移址都是 32 位的，实际物理地址的计算不再需要将段首地址左移 4 位了，直接相加即可，如果发生溢出的情况，则将溢出位舍弃。
 
+在JOS中，Boot Loader的链接地址是在 *boot/Makefrag*里面定义的，为 0x7C00。该文件的另外几个命令是生成 *obj/boot/*目录下面的几个文件的，该目录下 *boot.out* 是由 *boot/boot.S* 和 *boot/main.c*编译链接后生成的 ELF 可执行文件，而 *boot.asm* 是从可执行文件 *boot.out* 反编译的包含源码的汇编文件，而最后通过 objcopy 拷贝 *boot.out*中的 *.text* 代码节生成最终的二进制引导文件 *boot* (380个字节)，最后通过 sign.pl这个perl脚本填充 *boot* 文件到512字节（最后两个字节设置为 55 aa，代表这是一个引导扇区）。最终生成的镜像文件在 *obj/kern/kernel.img*，它大小为5120000字节，即10000个扇区大小。第一个扇区写入的是 *obj/boot/boot*，第二个扇区开始写入的是 *obj/kern/kernel*。
 
+关于ELF文件我们这里做一个简单介绍，当编译和链接一个C程序时，编译器将每个 *.c* 文件转换成一个 *.o* 对象文件，该文件包含以硬件期望的二进制格式编码的汇编语言指令。然后，链接器将所有 *.o* 对象文件合并成一个二进制映像，如*obj/kern/kernel*，这就是ELF文件，意思是“可执行和可链接格式”("Executable and Linkable Format")。
 
+ELF可执行文件是由 ELF文件头、程序头表(program header table)、节头表(section header table)和文件内容四部分组成的。而文件内容部分又由.text 节、.rodata 节、.stab 节、.stabstr 节、.data 节、.bss 节、.comment 节等部分组成。在这里我们只对以下几个部分感兴趣：
+
+```JavaScript
+.text: 程序的可执行指令
+.rodata: 只读数据，例如由C编译器生成的ASCII码。
+.data: 包含程序的初始化数据，例如使用 int x = 5 声明的全局变量；
+```
+
+当链接器计算程序的内存布局时，它会在.bss节中为未初始化的全局变量保留空间，如 `int x;`，c程序默认未初始化的全局变量值为零。因此，不需要在ELF二进制文件中存储.bss的内容，只是记录了.bss部分的地址和大小。
+
+可以使用 objdump 命令查看 ELF 文件的节信息：
+```JavaScript
+$ objdump -h obj/boot/boot.out
+
+obj/boot/boot.out:     file format elf32-i386
+
+Sections:
+Idx Name          Size      VMA       LMA       File off  Algn
+  0 .text         0000019c  00007c00  00007c00  00000074  2**2
+                  CONTENTS, ALLOC, LOAD, CODE
+  1 .eh_frame     0000009c  00007d9c  00007d9c  00000210  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  2 .stab         00000870  00000000  00000000  000002ac  2**2
+                  CONTENTS, READONLY, DEBUGGING
+  3 .stabstr      00000940  00000000  00000000  00000b1c  2**0
+                  CONTENTS, READONLY, DEBUGGING
+  4 .comment      0000002a  00000000  00000000  0000145c  2**0
+                  CONTENTS, READONLY
+
+$ objdump -h obj/kern/kernel
+
+obj/kern/kernel:     file format elf32-i386
+
+Sections:
+Idx Name          Size      VMA       LMA       File off  Algn
+  0 .text         00001acd  f0100000  00100000  00001000  2**4
+                  CONTENTS, ALLOC, LOAD, READONLY, CODE
+  1 .rodata       000006bc  f0101ae0  00101ae0  00002ae0  2**5
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  2 .stab         00004291  f010219c  0010219c  0000319c  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  3 .stabstr      0000197f  f010642d  0010642d  0000742d  2**0
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  4 .data         00009300  f0108000  00108000  00009000  2**12
+                  CONTENTS, ALLOC, LOAD, DATA
+  5 .got          00000008  f0111300  00111300  00012300  2**2
+                  CONTENTS, ALLOC, LOAD, DATA
+  6 .got.plt      0000000c  f0111308  00111308  00012308  2**2
+                  CONTENTS, ALLOC, LOAD, DATA
+  7 .data.rel.local 00001000  f0112000  00112000  00013000  2**12
+                  CONTENTS, ALLOC, LOAD, DATA
+  8 .data.rel.ro.local 00000044  f0113000  00113000  00014000  2**2
+                  CONTENTS, ALLOC, LOAD, DATA
+  9 .bss          00000648  f0113060  00113060  00014060  2**5
+                  CONTENTS, ALLOC, LOAD, DATA
+ 10 .comment      0000002a  00000000  00000000  000146a8  2**0
+                  CONTENTS, READONLY
+```
+
+上面列出的*Size、VMA、LMA、File off*分别表示节的大小，链接地址(link address)、加载地址(load address)以及节的偏移量。链接地址是指编译器指定代码和数据所需要放置的内存地址，由链接器配置；而加载地址是指程序被实际加载到内存的位置。在上图中可以看到，Boot Loader的链接地址和加载地址都是 0x7c00，而kernel的链接地址和加载地址却不相同。
+
+>链接地址和加载地址
+> 
+ 
 1. https://www.jianshu.com/p/af9d7eee635e
 2. https://blog.csdn.net/rongwenbin/article/details/18962057
 3. https://baike.baidu.com/item/BIOS%E5%BD%B1%E5%AD%90%E5%86%85%E5%AD%98
