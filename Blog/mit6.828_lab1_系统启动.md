@@ -64,7 +64,7 @@ boot.S主要是将处理器从实模式转换到32位的保护模式，因为只
 ```
 >在保护模式下，段式寻址可用 xxxx:yyyyyyyy 表示。其中xxxx表示索引，也就是段选择子，是 16 位的。 yyyyyyyy 是偏移量，是 32 位的.分段机制是利用一个称作段选择子的偏移量到全局描述符表中找到需要的段描述符，而这个段描述符中就存放着真正的段的物理首地址，然后再加上偏移地址量便得到了最后的物理地址。需要指出的是，在 32 位平台上，段物理首地址和偏移址都是 32 位的，实际物理地址的计算不再需要将段首地址左移 4 位了，直接相加即可，如果发生溢出的情况，则将溢出位舍弃。
 
-在JOS中，Boot Loader的链接地址是在 *boot/Makefrag*里面定义的，为 0x7C00。该文件的另外几个命令是生成 *obj/boot/*目录下面的几个文件的，该目录下 *boot.out* 是由 *boot/boot.S* 和 *boot/main.c*编译链接后生成的 ELF 可执行文件，而 *boot.asm* 是从可执行文件 *boot.out* 反编译的包含源码的汇编文件，而最后通过 objcopy 拷贝 *boot.out*中的 *.text* 代码节生成最终的二进制引导文件 *boot* (380个字节)，最后通过 sign.pl这个perl脚本填充 *boot* 文件到512字节（最后两个字节设置为 55 aa，代表这是一个引导扇区）。最终生成的镜像文件在 *obj/kern/kernel.img*，它大小为5120000字节，即10000个扇区大小。第一个扇区写入的是 *obj/boot/boot*，第二个扇区开始写入的是 *obj/kern/kernel*。
+*boot/Makefrag* 这个文件包含几个命令，作用是生成 *obj/boot/* 目录下面的几个文件，该目录下 *boot.out* 是由 *boot/boot.S* 和 *boot/main.c*编译链接后生成的 ELF 可执行文件，而 *boot.asm* 是从可执行文件 *boot.out* 反编译的包含源码的汇编文件，而最后通过 objcopy 拷贝 *boot.out*中的 *.text* 代码节生成最终的二进制引导文件 *boot* (380个字节)，最后通过 sign.pl这个perl脚本填充 *boot* 文件到512字节（最后两个字节设置为 55 aa，代表这是一个引导扇区）。最终生成的镜像文件在 *obj/kern/kernel.img*，它大小为5120000字节，即10000个扇区大小。第一个扇区写入的是 *obj/boot/boot*，第二个扇区开始写入的是 *obj/kern/kernel*。
 
 关于ELF文件我们这里做一个简单介绍，当编译和链接一个C程序时，编译器将每个 *.c* 文件转换成一个 *.o* 对象文件，该文件包含以硬件期望的二进制格式编码的汇编语言指令。然后，链接器将所有 *.o* 对象文件合并成一个二进制映像，如*obj/kern/kernel*，这就是ELF文件，意思是“可执行和可链接格式”("Executable and Linkable Format")。
 
@@ -127,10 +127,46 @@ Idx Name          Size      VMA       LMA       File off  Algn
                   CONTENTS, READONLY
 ```
 
-上面列出的*Size、VMA、LMA、File off*分别表示节的大小，链接地址(link address)、加载地址(load address)以及节的偏移量。链接地址是指编译器指定代码和数据所需要放置的内存地址，由链接器配置；而加载地址是指程序被实际加载到内存的位置。在上图中可以看到，Boot Loader的链接地址和加载地址都是 0x7c00，而kernel的链接地址和加载地址却不相同。
+上面列出的*Size、VMA、LMA、File off*分别表示节的大小，虚拟地址(Virtual Memory Address)、装载地址(Load Memory Address)以及节的偏移量。VMA是指编译器指定代码和数据所需要放置的内存地址，由链接器配置；而LMA是指程序被实际加载到内存的位置。在上图中可以看到，Boot Loader的VMA和LMA都是 0x7c00，而kernel的VMA和LMA却不相同。
 
->链接地址和加载地址
+> ## LMA和VMA
+> LMA: 加载地址，如加载到RAM中等，在嵌入式中，有可能是在ROM中（这时LMA!=VMA）
 > 
+> VMA: 虚拟地址，就是程序运行时的地址，一般就是内存地址，如要把ROM中的数据加载到RAM中运行
+> 
+> 可执行目标文件都有两个地址，就是LMA和VMA。
+> LMA就是程序期望的运行地址，把可执行目标文件从硬盘里面，搬到内存里去，然后才能运行。而这里的装载，就是对应这个意思。而VMA简单说就是，程序运行时候的所对应的地址。此处虚拟，一般来说，指的是启用了MMU之后，才有了虚拟地址和实地址。此处，我们可以简单的理解为内存的实际地址。程序运行前，要把程序的内容，拷贝到对应的内存地址处，然后才能运行的。因此，一句话总结就是：代码要运行的时候，此时对应的地址，就是VMA。在多数情况下，LMA和VMA是相等的。如果发现VMA!=LMA, 即 程序运行时候的地址，和刚刚把程序内容拷贝到的地址LMA，两者不一样，那么就要把对应的内容，此处主要是data，数据段的内容，从刚刚装载到的位置，LMA处，拷贝到VMA处，这样，程序运行的时候，才能够在执行的时候，找到对应的VMA处的变量，才能找到对应的值，程序才能正常运行。更详细的解释可以看[这里](https://blog.csdn.net/suz_cheney/article/details/24586745)。
+
+Boot Loader的VMA和LMA是一样的，都是0x7c00。而Kernel的VMA和LMA却是不一样的。VMA是 0xf0100000，LMA地址是0x00100000，也就是说Kernel加载到了内存中的 0x00100000 这个低地址处，但是却期望在一个高地址 0xf0100000 执行，为什么要这么做呢？这是因为我们的内核通常期望运行在一个高的虚拟地址，以便把低位的虚拟地址空间让给用户程序使用。但是，以前的机器通常没有 0xF0100000 这么大的物理内存，这时候就需要通过处理器的内存管理硬件来将 0xf0100000 映射到 0x00100000，我们将在后面详细讨论。
+
+在JOS中，Boot Loader的VMA是在 *boot/Makefrag*里面定义的，为 0x7c00，这是Boot Loader期望执行的地址。而BIOS也正是把Boot Loader装载到 0x7c00 地址处的，所以Boot Loader的VMA和LMA是一致的。如果我们在 *boot/Makefrag*文件中更改 0x7c00 为其它地址，Boot Loader在执行的过程中便会出错。
+
+此外在ELF文件头中还有一个重要的字段，名为e_entry，此字段包含程序的入口地址(VMA)：程序期望开始执行的内存地址。例如，可以使用以下命令查看Kernel的入口地址：
+
+```JavaScript
+$ objdump -f obj/kern/kernel
+
+obj/kern/kernel:     file format elf32-i386
+architecture: i386, flags 0x00000112:
+EXEC_P, HAS_SYMS, D_PAGED
+start address 0x0010000c
+```
+注意，入口地址不等于程序在内存中开始的地址，只是程序开始执行的地址。入口地址之前还有一段地址存储了程序的其他内容。
+
+
+# 3.Kernel
+上一节我们说到过，Boot Loader的VMA和LMA都是 0x7c00，而Kernel的VMA和LMA却是不一样的，VMA是 0xf0100000，LMA地址是0x00100000，也就是说Kernel加载到了内存中的 0x00100000 这个低地址处，但是却期望在一个高地址 0xf0100000 执行，高地址和底地址的转换是由处理器的内存管理硬件来实现的。
+
+物理地址 0xf0100000 要求至少3.75GB的内存，这在早期时候的PC上是达不到的。所以，我们将使用处理器的内存管理硬件将虚拟地址0xf0100000（内核代码希望运行的地址）映射到物理地址 0x00100000 处(Boot Loader将内核实际加载到的地址)。0x00100000 地址对应的内存大小是1MB，看看上面8086的内存分布图，所以内核实际上是被加载到了BIOS的上方。
+
+在下一个实验中，我们将整个电脑底部256MB的物理地址空间，即从物理地址0x000000000到0x0fffffff，映射到虚拟地址0xf0000000到0xffffffff。现在，我们只需映射4MB的物理内存，这将足以让我们启动和运行内核。我们使用在 *kern/entrypgdir.c* 中一个手写的、静态初始化的页目录和页表项来实现这个映射。我们不需要知道实现细节，只需要知道，在*kernel/entry.S* 设置cr3寄存器的值为页目录的物理地址后，虚拟地址映射(分页)就开启了。在这之前，所有的内存引用都指的是真正的物理地址，而在开启分页之后，内存引用是由虚拟内存，这个虚拟地址可以由内存管理硬件转换为真正的物理地址。而 *kern/entrypgdir.c* 这个文件中的页目录和页表项便将 0xf0000000:0xf0400000 这个虚拟地址范围映射至物理地址 0x00000000:0x00400000，而虚拟地址 0x00000000:0x00400000 也映射到了物理地址 0x00000000:0x00400000。任何不在这两个范围中的虚拟地址都将导致硬件异常，由于我们尚未设置中断处理，这将导致QEMU转储机器状态并退出。
+
+
+
+
+
+
+
  
 1. https://www.jianshu.com/p/af9d7eee635e
 2. https://blog.csdn.net/rongwenbin/article/details/18962057
@@ -140,3 +176,4 @@ Idx Name          Size      VMA       LMA       File off  Algn
 6. https://blog.csdn.net/weixin_37924880/article/details/78644659
 7. https://www.zhihu.com/question/311449926
 8. https://www.cnblogs.com/chanchan/p/7648490.html
+9. https://blog.csdn.net/suz_cheney/article/details/24586745
