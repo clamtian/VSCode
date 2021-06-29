@@ -161,6 +161,62 @@ start address 0x0010000c
 
 在下一个实验中，我们将整个电脑底部256MB的物理地址空间，即从物理地址0x000000000到0x0fffffff，映射到虚拟地址0xf0000000到0xffffffff。现在，我们只需映射4MB的物理内存，这将足以让我们启动和运行内核。我们使用在 *kern/entrypgdir.c* 中一个手写的、静态初始化的页目录和页表项来实现这个映射。我们不需要知道实现细节，只需要知道，在*kernel/entry.S* 设置cr3寄存器的值为页目录的物理地址后，虚拟地址映射(分页)就开启了。在这之前，所有的内存引用都指的是真正的物理地址，而在开启分页之后，内存引用是由虚拟内存，这个虚拟地址可以由内存管理硬件转换为真正的物理地址。而 *kern/entrypgdir.c* 这个文件中的页目录和页表项便将 0xf0000000:0xf0400000 这个虚拟地址范围映射至物理地址 0x00000000:0x00400000，而虚拟地址 0x00000000:0x00400000 也映射到了物理地址 0x00000000:0x00400000。任何不在这两个范围中的虚拟地址都将导致硬件异常，由于我们尚未设置中断处理，这将导致QEMU转储机器状态并退出。
 
+## 3.1 在控制台显示输出
+这里我们要完成cprintf函数，与printf函数不同，cprintf函数用于向当前窗口输出数据，printf是标准输出，就是指可以完全不知道你输出的对象，只是以标准的文本流方式输出，cprintf是与终端相关的，要用到一些系统平台，硬件设备相关的特性，所以可以有颜色和格式等很多选项可供选择，但同时也削弱了移植性。前者无可移植性，而后者是标准的。
+
+这里我们来看一下几个跟cprintf函数相关的文件，*kern/console.c* 这个文件实现了cputchar，getchar等函数，而cputchar函数最终调用了cga_putc函数来完成显示功能。*lib/printfmt.c* 这个文件实现了vprintfmt函数，vprintfmt函数是一个最精简的原始printf函数，它会被printf, sprintf, fprintf等函数调用，是一个既被内核使用也被用户使用的函数。而cprintf是在 *kern/printf.c* 中实现的，它调用了vprintfmt函数，而vprintfmt函数调用了putch函数作为参数，putch函数最终调用了console.c中的cputchar。即 cprintf --> vprintfmt --> putch --> cputchar --> cga_putc。
+
+查看 *kern/init.c* 文件，里面有一行：
+```JavaScript
+cprintf("6828 decimal is %o octal!\n", 6828);
+```
+这段代码是将十进制6828以八进制的形式打印出来，由于八进制的输出是lab1的一个作业，这部分需要我们自己去实现，所以在初始情况下会产生如下输出：
+```JavaScript
+6828 decimal is XXX octal!
+```
+而当我们完成了8进制的输出后，上面那句输出会变成：
+```JavaScript
+6828 decimal is 15254 octal!
+```
+
+打开 *kern/monitor.c* 文件，在monitor函数内插入以下内容：
+```JavaScript
+int x = 1, y = 3, z = 4;
+cprintf("x %d, y %x, z %d\n", x, y, z);
+```
+在系统执行到上述语句的时候，在cprintf, cons_putc, va_arg, 和 vcprintf 这几个函数处打上断点：
+```JavaScript
+(gdb) b cprintf
+(gdb) b cons_putc
+(gdb) b va_arg
+(gdb) b vcprintf
+```
+
+观察接下来的输出：
+
+```JavaScript
+cprintf (fmt=0xf0101e2e "x %d, y %x, z %d\n")
+vcprintf (fmt=0xf0101e2e "x %d, y %x, z %d\n", ap=0xf010ff54 "\001") 
+cons_putc (c=-267321572)
+cons_putc (c=-267321572) 
+cons_putc (c=-267384258) 
+cons_putc (c=-267321572)
+cons_putc (c=-267321572) 
+cons_putc (c=-267321572) 
+cons_putc (c=-267321572) 
+cons_putc (c=-267384258) 
+cons_putc (c=-267321572) 
+cons_putc (c=-267321572) 
+cons_putc (c=-267321572) 
+cons_putc (c=-267321572) 
+cons_putc (c=-267384258) 
+cons_putc (c=-267321572) 
+cprintf (fmt=0xf0102017 "%s") 
+vcprintf (fmt=0xf0102017 "%s", ap=0xf010ff24)
+cons_putc (c=-267321620) 
+cons_putc (c=-267321620) 
+cons_putc (c=-267321620) 
+```
 
 
 
@@ -177,3 +233,4 @@ start address 0x0010000c
 7. https://www.zhihu.com/question/311449926
 8. https://www.cnblogs.com/chanchan/p/7648490.html
 9. https://blog.csdn.net/suz_cheney/article/details/24586745
+10. https://blog.csdn.net/a1023182899/article/details/78162573

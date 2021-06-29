@@ -207,3 +207,81 @@ Breakpoint 3, 0x00100025 in ?? ()
 ```JavaScript
 qemu: fatal: Trying to execute code outside RAM or ROM at 0xf010002c
 ```
+
+# Exercise 8
+>  We have omitted a small fragment of code - the code necessary to print octal numbers using patterns of the form "%o". Find and fill in this code fragment.
+
+将 *lib/printfmt.c* 中的以下内容：
+
+```JavaScript
+case 'o':
+         // Replace this with your code.
+         putch('X', putdat);
+         putch('X', putdat);
+         putch('X', putdat);
+         break;
+```
+
+修改为：
+
+```JavaScript
+case 'o':
+         num = getuint(&ap, lflag);
+         base = 8;
+         goto number;
+```
+
+这样，便完成了八进制的输出。
+
+## Question
+> Explain the interface between *printf.c* and *console.c*. Specifically, what function does *console.c* export? How is this function used by printf.c?
+
+*kern/console.c* 这个文件实现了cputchar，getchar等函数，而cputchar函数最终调用了cga_putc函数来完成显示功能。*lib/printfmt.c* 这个文件实现了vprintfmt函数，vprintfmt函数是一个最精简的原始printf函数，它会被printf, sprintf, fprintf等函数调用，是一个既被内核使用也被用户使用的函数。而cprintf是在 *kern/printf.c* 中实现的，它调用了vprintfmt函数，而vprintfmt函数调用了putch函数作为参数，putch函数最终调用了console.c中的cputchar。即 cprintf --> vprintfmt --> putch --> cputchar --> cga_putc。
+
+> Explain the following from *console.c*:
+
+```JavaScript
+if (crt_pos >= CRT_SIZE) {
+        int i;
+        memmove(crt_buf, crt_buf + CRT_COLS, (CRT_SIZE - CRT_COLS) * sizeof(uint16_t));
+        for (i = CRT_SIZE - CRT_COLS; i < CRT_SIZE; i++)
+                crt_buf[i] = 0x0700 | ' ';
+        crt_pos -= CRT_COLS;
+}
+```
+
+这段代码的作用是实现屏幕滚动一行。
+
+> Trace the execution of the following code step-by-step:
+
+```JavaScript
+   int x = 1, y = 3, z = 4;
+   cprintf("x %d, y %x, z %d\n", x, y, z);
+```
+
+> In the call to cprintf(), to what does fmt point? To what does ap point?
+> List (in order of execution) each call to cons_putc, va_arg, and vcprintf. For cons_putc, list its argument as well. For va_arg, list what ap points to before and after the call. For vcprintf list the values of its two arguments.
+
+在调用cprintf函数时，fmt指向的是第一个字符串参数，ap指向的是fmt后面的参数。
+
+> Run the following code.
+```JavaScript
+   unsigned int i = 0x00646c72;
+   cprintf("H%x Wo%s", 57616, &i);
+```
+> What is the output? Explain how this output is arrived at in the step-by-step manner of the previous exercise.
+> The output depends on that fact that the x86 is little-endian. If the x86 were instead big-endian what would you set i to in order to yield the same output? Would you need to change 57616 to a different value?
+
+输出是 `He110 World` ，因为 57616 = 0xe110，所以前半部分输出是 `He110`，而 i = 0x00646c72 被当做字符串输出，所以它会被输出为 `'r'=(char)0x72 'l'=(char)0x6c 'd'=(char)0x64`。若在大端字节序的机器上，输出会变成 `He110 Wodlr`。
+
+> In the following code, what is going to be printed after 'y='? (note: the answer is not a specific value.) Why does this happen?
+```JavaScript
+   cprintf("x=%d y=%d", 3);
+```
+如果fmt里面指定的格式化字符串数目大于实际参数数目，因为缺少参数，而由可变参数的方式知道会打印第一个参数之上的栈里面的4字节内容。
+
+> Let's say that GCC changed its calling convention so that it pushed arguments on the stack in declaration order, so that the last argument is pushed last. How would you have to change cprintf or its interface so that it would still be possible to pass it a variable number of arguments?
+
+如果GCC参数入栈方式改为从左往右，则可能需要加一个表示参数个数的参数传到cprintf函数中以获取可变参数。
+    
+
