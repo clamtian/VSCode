@@ -47,67 +47,42 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 }
 class Solution {
 public:
-    vector<int> pathsWithMaxScore(vector<string>& board) {
-        vector<int> res = { 0, 0 };
-        int n = board.size();
-        vector<vector<LL>> val(n, vector<LL>(n, 0));
-        vector<vector<LL>> path(n, vector<LL>(n, 0));
-        for(int i = n - 2; i >= 0; --i){
-            if(board[i][n - 1] != 'X'){
-                val[i][n - 1] = val[i + 1][n - 1] + (board[i][n - 1] - '1');
-                path[i][n - 1] = 1;
-            }else{
-                for(; i >= 0; --i){
-                    val[i][n - 1] = -1;
-                    path[i][n - 1] = 0;
-                }
-            }     
+    TreeNode* deserialize(string data) {
+        stack<TreeNode*> s1, s2;
+        if(data == "null") return nullptr;
+        vector<string> vec;
+        int pos = 0, n = data.size();
+        while(pos < n && data.find(',', pos) != string::npos){
+            int pos_ = data.find(',', pos);
+            vec.push_back(data.substr(pos, pos_ - pos));
+            pos = pos_ + 1;
         }
-        for(int j = n - 2; j >= 0; --j){
-            if(board[n - 1][j] != 'X'){
-                val[n - 1][j] = val[n - 1][j + 1] + (board[n - 1][j] - '1');
-                path[n - 1][j] = 1;
-            }else{
-                for(; j >= 0; --j){
-                    val[n - 1][j] = -1;
-                    path[n - 1][j] = 0;
+        vec.push_back(data.substr(pos));
+        pos = 0, n = vec.size();
+        TreeNode* root = new TreeNode(stoi(vec[pos++]));
+        s1.push(root);
+        while(!s1.empty() && pos < n){
+            while(!s1.empty()){
+                TreeNode* left, * right;
+                if(vec[pos] != "null") left = new TreeNode(stoi(vec[pos]));
+                ++pos;
+                if(vec[pos] != "null") right = new TreeNode(stoi(vec[pos]));
+                ++pos;
+                TreeNode* node = s1.top();
+                s1.pop();
+                if(node){
+                    node->left = left;
+                    node->right = right;
                 }
-            }     
-        }
-        for(int i = n - 2; i >= 0; --i){
-            for(int j = n - 2; j >= 0; --j){
-                if(board[i][j] != 'X'){
-                    if(path[i + 1][j] > 0){
-                        val[i][j] = val[i + 1][j];
-                        path[i][j] = path[i + 1][j];
-                    }
-                    if(path[i][j + 1] > 0){
-                        if(val[i][j + 1] > val[i][j]){
-                            val[i][j] = val[i][j + 1];
-                            path[i][j] = path[i][j + 1];
-                        }else if(val[i][j + 1] == val[i][j]){
-                            path[i][j] += path[i][j + 1];
-                        }
-                    }
-                    if(path[i + 1][j + 1] > 0){
-                        if(val[i + 1][j + 1] > val[i][j]){
-                            val[i][j] = val[i  +1][j + 1];
-                            path[i][j] = path[i + 1][j + 1];
-                        }else if(val[i + 1][j + 1] == val[i][j]){
-                            path[i][j] += path[i + 1][j + 1];
-                        }
-                    }
-                    if(board[i][j] != 'E') val[i][j] += (board[i][j] - '1');
-                }else if(board[i][j] != 'E'){
-                    val[i][j] = -1;
-                    path[i][j] = 0;
-                }
+                s2.push(left);
+                s2.push(right);
+            }
+            while(!s2.empty()){
+                s1.push(s2.top());
+                s2.pop();
             }
         }
-        if(path[0][0] == 0) return res;
-        res[0] = val[0][0] % MOD;
-        res[1] = path[0][0] % MOD;
-        return res;
+        return root;
     }
 };
 
@@ -135,6 +110,18 @@ int main() {
     x2.next = &x1;
     ListNode* head = &x5;
 
+    TreeNode* r1 = new TreeNode(1);
+    TreeNode* r2 = new TreeNode(2);
+    TreeNode* r3 = new TreeNode(3);
+    TreeNode* r4 = new TreeNode(4);
+    TreeNode* r5 = new TreeNode(5);
+
+    r1->left = r2;
+    r1->right = r3;
+    r3->left = r4;
+    r3->right = r5;
+
+
     string t = "alex";
     string s = "ababaab";
     char ch = 49 + '0';
@@ -146,7 +133,7 @@ int main() {
                                       {"1", "0", "0", "1", "0"} };
 
     Solution so;
-    so.pathsWithMaxScore(str);
+    so.deserialize("1,2,3,null,null,4,5");
 
     return 0;
 }
