@@ -218,7 +218,19 @@ cons_putc (c=-267321620)
 cons_putc (c=-267321620) 
 ```
 
+## 3.2 函数调用堆栈
 
+要搞清楚函数调用堆栈的原理，首先需要知道 esp 和 ebp 这两个寄存器，esp 指向栈顶，ebp 指向栈底，还有一个eip指向的是执行函数调用的入口地址，具体可参阅[这里](https://www.jianshu.com/p/8ec9063a37bd)。现在让我们来看看在JOS中是怎么对栈定义的。
+
+在 *kern/entry.S* 文件中，77行处将一个宏变量 `bootstacktop` 的值赋值给了寄存器esp。而bootstacktop出现在bootstack下，bootstack出现在.data段下，这是数据段。可以肯定，这就是栈了。通过93行.space指令，在bootstack位置处初始化了KSTKSIZE这么多的空间。KSTKSIZE在inc/memlayout.h里面定义，是8*PGSIZE，而PGSIZE在inc/mmu.h中定义，值为4096。
+
+接下来查看反汇编代码*obj/kern/kernel.asm*，58行处向 esp 中写入0xf011f000。这就是栈顶的位置，栈将向地址值更小的方向生长。
+
+```JavaScript
+	# Set the stack pointer
+	movl	$(bootstacktop),%esp
+f0100034:	bc 00 00 11 f0       	mov    $0xf0110000,%esp
+```
 
 
 
@@ -234,3 +246,5 @@ cons_putc (c=-267321620)
 8. https://www.cnblogs.com/chanchan/p/7648490.html
 9. https://blog.csdn.net/suz_cheney/article/details/24586745
 10. https://blog.csdn.net/a1023182899/article/details/78162573
+11. https://www.jianshu.com/p/8ec9063a37bd
+12. https://www.jianshu.com/p/015f8e904a71
