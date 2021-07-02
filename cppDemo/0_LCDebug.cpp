@@ -47,42 +47,41 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 }
 class Solution {
 public:
-    TreeNode* deserialize(string data) {
-        stack<TreeNode*> s1, s2;
-        if(data == "null") return nullptr;
-        vector<string> vec;
-        int pos = 0, n = data.size();
-        while(pos < n && data.find(',', pos) != string::npos){
-            int pos_ = data.find(',', pos);
-            vec.push_back(data.substr(pos, pos_ - pos));
-            pos = pos_ + 1;
+    unordered_map<int, vector<int>> umap;
+    unordered_set<int> uset;
+    int largestPathValue(string colors, vector<vector<int>>& edges) {
+        for(auto& edge : edges) umap[edge[0]].push_back(edge[1]);
+        int n = colors.size(), ans = 0;
+        vector<vector<int>> dp(n, vector<int>(27, 0));
+        for(int i = 0; i < n; ++i){
+            auto vec = dfs(i, colors, dp);
+            uset.clear();
+            if(vec[0] == -1) return -1;
+            else ans = *max_element(vec.begin() + 1, vec.end());
         }
-        vec.push_back(data.substr(pos));
-        pos = 0, n = vec.size();
-        TreeNode* root = new TreeNode(stoi(vec[pos++]));
-        s1.push(root);
-        while(!s1.empty() && pos < n){
-            while(!s1.empty()){
-                TreeNode* left, * right;
-                if(vec[pos] != "null") left = new TreeNode(stoi(vec[pos]));
-                ++pos;
-                if(vec[pos] != "null") right = new TreeNode(stoi(vec[pos]));
-                ++pos;
-                TreeNode* node = s1.top();
-                s1.pop();
-                if(node){
-                    node->left = left;
-                    node->right = right;
-                }
-                s2.push(left);
-                s2.push(right);
+        return ans;
+    }
+    vector<int> dfs(int k, string& colors, vector<vector<int>>& dp){
+        if(dp[k][0] != 0) return dp[k];
+        if(uset.find(k) != uset.end()){
+            dp[k][0] = -1;
+            return dp[k];
+        }
+        uset.insert(k);
+        for(int node : umap[k]){
+            vector<int> vec = dfs(node, colors, dp);
+            if(vec[0] == -1){
+                dp[k][0] = -1;
+                return dp[k];
             }
-            while(!s2.empty()){
-                s1.push(s2.top());
-                s2.pop();
+            for(int i = 1; i < 27; ++i){
+                dp[k][i] = max(dp[k][i], vec[i]);
             }
         }
-        return root;
+        uset.erase(k);
+        dp[k][colors[k] - 'a' + 1]++;
+        dp[k][0] = 1;
+        return dp[k];
     }
 };
 
@@ -92,7 +91,7 @@ int main() {
     string str1 = "ac";
     string str2 = "aba";
     cout << max(str1, str2) << endl;
-    vector<vector<int>> a = { {12}, {9,11},{5,7,10,14}};
+    vector<vector<int>> a = { {0, 1}, {0, 2},{2, 3}, {3, 4}};
     vector<int> b = { 3,5,8,8,8,10,11,12 };
     vector<int> b_ = { 45,57,38,64,52,92,31,57,31,52,3,12,93,8,11,60,55,92,42,27,40,10,77,53,8,34,87,39,8,35,28,70,32,97,88,54,82,54,54,10,78,23,82,52,10,49,8,36,9,52,81,26,5,2,30,39,89,62,39,100,67,33,86,22,49,15,94,59,47,41,45,17,99,87,77,48,22,77,82,85,97,66,3,38,49,60,66 };
 
@@ -133,7 +132,7 @@ int main() {
                                       {"1", "0", "0", "1", "0"} };
 
     Solution so;
-    so.deserialize("1,2,3,null,null,4,5");
+    so.largestPathValue("abaca", a);
 
     return 0;
 }
