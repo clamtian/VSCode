@@ -233,9 +233,6 @@ f0100034:	bc 00 00 11 f0       	mov    $0xf0110000,%esp
 ```
 
 
-
-
- 
 1. https://www.jianshu.com/p/af9d7eee635e
 2. https://blog.csdn.net/rongwenbin/article/details/18962057
 3. https://baike.baidu.com/item/BIOS%E5%BD%B1%E5%AD%90%E5%86%85%E5%AD%98
