@@ -16,12 +16,18 @@
 
 using namespace std;
 
+int MOD = 1e9 + 7;
+//快速幂
 class Solution {
 public:
-    int Cardgame(vector<int>& cards){
-        int n = cards.size();
-        vector<int> 
-        return find(cards, 0, n);
+    int fastPow(int base, int pow){
+        int res = 1;
+        while(pow){
+            if(pow & 1) res = res * base % MOD;
+            base = base * base % MOD;
+            pow >>= 1;
+            
+        }
+        return res;
     }
-    int find()
 };
