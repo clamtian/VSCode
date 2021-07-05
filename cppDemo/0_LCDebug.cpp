@@ -45,43 +45,51 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
     }
     return p1.second > p2.second;
 }
+typedef unsigned long long ULL;
+const int N = 100010;
+ULL h[N], p[N]; // h[k]存储字符串前k个字母的哈希值, p[k]存储 P^k mod 2^64
+int P = 133331;
+
+
+// 计算子串 str[l ~ r] 的哈希值
+ULL get(int l, int r){
+    return h[r] - h[l - 1] * p[r - l + 1];
+}
+
 class Solution {
 public:
-    unordered_map<int, vector<int>> umap;
-    unordered_set<int> uset;
-    int largestPathValue(string colors, vector<vector<int>>& edges) {
-        for(auto& edge : edges) umap[edge[0]].push_back(edge[1]);
-        int n = colors.size(), ans = 0;
-        vector<vector<int>> dp(n, vector<int>(27, 0));
-        for(int i = 0; i < n; ++i){
-            auto vec = dfs(i, colors, dp);
-            uset.clear();
-            if(vec[0] == -1) return -1;
-            else ans = *max_element(vec.begin() + 1, vec.end());
+    unordered_map<ULL, int> umap;
+    unordered_set<ULL> s;
+    bool check(int l, vector<vector<int>>& paths){
+        umap.clear();
+        int m = paths.size();
+        for(int i = 0; i < m; ++i){
+            s.clear();
+            int n = paths[i].size();
+            for (int k = 1; k <= n; ++k){
+                h[k] = h[k - 1] * P + paths[i][k - 1];
+                p[k] = p[k - 1] * P;
+            }
+            for(int j = l; j <= n; ++j){
+                s.insert(get(j - l + 1, j));
+            }
+            for(auto path : s) umap[path]++;
         }
-        return ans;
+        for(auto& [path, num] : umap){
+            if(num == m) return true;
+        }
+        return false;
     }
-    vector<int> dfs(int k, string& colors, vector<vector<int>>& dp){
-        if(dp[k][0] != 0) return dp[k];
-        if(uset.find(k) != uset.end()){
-            dp[k][0] = -1;
-            return dp[k];
+    int longestCommonSubpath(int n, vector<vector<int>>& paths) {
+        int l = 0, r = N;
+        p[0] = 1;
+        for(auto& path : paths) r = min(r, (int)path.size());
+        while(l < r){
+            int mid = l + (r - l + 1) >> 1;
+            if(check(mid, paths)) l = mid;
+            else r = mid - 1;
         }
-        uset.insert(k);
-        for(int node : umap[k]){
-            vector<int> vec = dfs(node, colors, dp);
-            if(vec[0] == -1){
-                dp[k][0] = -1;
-                return dp[k];
-            }
-            for(int i = 1; i < 27; ++i){
-                dp[k][i] = max(dp[k][i], vec[i]);
-            }
-        }
-        uset.erase(k);
-        dp[k][colors[k] - 'a' + 1]++;
-        dp[k][0] = 1;
-        return dp[k];
+        return l;
     }
 };
 
@@ -91,7 +99,7 @@ int main() {
     string str1 = "ac";
     string str2 = "aba";
     cout << max(str1, str2) << endl;
-    vector<vector<int>> a = { {0, 1}, {0, 2},{2, 3}, {3, 4}};
+    vector<vector<int>> a = {{0,1,2,3,4},{2,3,4},{4,0,1,2,3}};
     vector<int> b = { 3,5,8,8,8,10,11,12 };
     vector<int> b_ = { 45,57,38,64,52,92,31,57,31,52,3,12,93,8,11,60,55,92,42,27,40,10,77,53,8,34,87,39,8,35,28,70,32,97,88,54,82,54,54,10,78,23,82,52,10,49,8,36,9,52,81,26,5,2,30,39,89,62,39,100,67,33,86,22,49,15,94,59,47,41,45,17,99,87,77,48,22,77,82,85,97,66,3,38,49,60,66 };
 
@@ -132,7 +140,7 @@ int main() {
                                       {"1", "0", "0", "1", "0"} };
 
     Solution so;
-    so.largestPathValue("abaca", a);
+    so.longestCommonSubpath(5, a);
 
     return 0;
 }
