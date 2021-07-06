@@ -58,43 +58,42 @@ ULL get(int l, int r){
 
 class Solution {
 public:
-    unordered_map<ULL, int> umap;
-    unordered_set<ULL> s;
-    bool check(int l, vector<vector<int>>& paths){
-        umap.clear();
-        int m = paths.size();
-        for(int i = 0; i < m; ++i){
-            s.clear();
-            int n = paths[i].size();
-            for (int k = 1; k <= n; ++k){
-                h[k] = h[k - 1] * P + paths[i][k - 1];
-                p[k] = p[k - 1] * P;
+    vector<vector<string>> displayTable(vector<vector<string>>& orders) {
+        
+        map<string, int> m;
+        for(auto& order : orders){
+            m[order[2]] = 0;
+        }
+        int n = m.size();
+        vector<map<string, int>> vec(505, m);
+        vector<int> flag(505, 0);
+        for(auto& order : orders){
+            flag[stoi(order[1])] = 1;
+            vec[stoi(order[1])][order[2]]++;
+        }
+        vector<vector<string>> res;
+        vector<string> v = { "Table" };
+        for(auto [food, num] : m) v.push_back(food);
+        res.push_back(v);
+        for(int i = 1; i < 505; ++i){
+            if(flag[i]){
+                vector<string> v;
+                for(auto [food, num] : vec[i]) 
+                    v.push_back(to_string(num));
+                res.push_back(v);
             }
-            for(int j = l; j <= n; ++j){
-                s.insert(get(j - l + 1, j));
-            }
-            for(auto path : s) umap[path]++;
         }
-        for(auto& [path, num] : umap){
-            if(num == m) return true;
-        }
-        return false;
-    }
-    int longestCommonSubpath(int n, vector<vector<int>>& paths) {
-        int l = 0, r = N;
-        p[0] = 1;
-        for(auto& path : paths) r = min(r, (int)path.size());
-        while(l < r){
-            int mid = l + (r - l + 1) >> 1;
-            if(check(mid, paths)) l = mid;
-            else r = mid - 1;
-        }
-        return l;
+        return res;
     }
 };
 
 
 int main() {
+
+
+
+
+
 
     string str1 = "ac";
     string str2 = "aba";
@@ -106,6 +105,12 @@ int main() {
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
                                {'0', '1', '0'},
                                {'1', '1', '1'} };
+    vector<vector<string>> svec = { {"David","3","Ceviche"},
+                                {"Corina","10","Beef Burrito"},
+                                {"David","3","Fried Chicken"},
+                                {"Carla","5","Water"},
+                                {"Carla","5","Ceviche"},
+                                {"Rous","3","Ceviche"} };
     ListNode x1(5);
     ListNode x2(2);
     ListNode x3(3);
@@ -138,9 +143,7 @@ int main() {
                                       {"1", "0", "1", "1", "1"},
                                       {"1", "1", "1", "1", "1"},
                                       {"1", "0", "0", "1", "0"} };
-
     Solution so;
-    so.longestCommonSubpath(5, a);
-
+    so.displayTable(svec);
     return 0;
 }
