@@ -38,7 +38,8 @@ using namespace std;
   {
     //do something
   }
-
+* 判断一个数是不是2的幂次
+  x & (x - 1) == 0
 */
 class Solution {
 public:
