@@ -58,42 +58,21 @@ ULL get(int l, int r){
 
 class Solution {
 public:
-    vector<vector<string>> displayTable(vector<vector<string>>& orders) {
-        
-        map<string, int> m;
-        for(auto& order : orders){
-            m[order[2]] = 0;
-        }
-        int n = m.size();
-        vector<map<string, int>> vec(505, m);
-        vector<int> flag(505, 0);
-        for(auto& order : orders){
-            flag[stoi(order[1])] = 1;
-            vec[stoi(order[1])][order[2]]++;
-        }
-        vector<vector<string>> res;
-        vector<string> v = { "Table" };
-        for(auto [food, num] : m) v.push_back(food);
-        res.push_back(v);
-        for(int i = 1; i < 505; ++i){
-            if(flag[i]){
-                vector<string> v;
-                for(auto [food, num] : vec[i]) 
-                    v.push_back(to_string(num));
-                res.push_back(v);
-            }
-        }
-        return res;
-    }
+    
 };
 
 
+vector<vector<int>> res;
+
+vector<vector<int>> func(int m, int n){
+    //巴拉巴拉
+}
+void dfs(int m, int n, vector<vector<int>> vec){
+    //巴拉巴拉
+}
+
+
 int main() {
-
-
-
-
-
 
     string str1 = "ac";
     string str2 = "aba";

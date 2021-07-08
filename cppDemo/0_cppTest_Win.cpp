@@ -16,13 +16,22 @@
 #include <numeric>
 #include <queue>
 #include <sstream> 
-
+#include<iomanip>
 using namespace std;
 
+
+const double eps = 1e-7;
 int main()
 {
-    int n = stoi("0000");
-    cout << n << endl;
+    double x;
+    cin >> x;
+    double l = -x, r = x;
+    while(r - l > eps){
+        double mid = (l + r) / 2;
+        if(mid * mid * mid > x) r = mid;
+        else l = mid;
+    }
+    cout << fixed << setprecision(6) << l << endl;
     
     return 1;
 }
