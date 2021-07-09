@@ -1,15 +1,83 @@
->这个lab主要是实现内存分页管理，如果你对操作系统的虚拟内存还不熟悉的话，建议先去看一看相关的资料。这一节涉及的理论知识较多，也比较抽象，是难度相当大的一个lab，同时也是后续lab的基础，所以，务必弄懂这个lab，否则后续的实验会很棘手。
 
 # 1.回顾内存布局
 
-完成lab1后，我们的内存使用情况如下：
+完成part1后，我们的内存使用情况如下：
 
-![avatar](./image/lab1内存使用情况.png)
+![avatar](./image/lab2内存使用情况3.png)
 
-其中红色块为已使用内存，蓝色块为未使用内存。其中0~0x03ff(1KB)是BIOS中断向量表(后面会被设置为中断描述符表IDT)，而后紧接着的256B空间存放的是BIOS structures，这两部分 1KB + 256B = 1280B 都需要保留，由于开启分页后，内存的最小执行单元是一页(4KB)，所以我们需要为其保留 4KB 的位置。后面使用的内存是被加载到 0x7c00 的 Boot Loader，接着 Boot Loader 代码执行后，会将内核代码的ELF文件头读取到 0x10000(64KB) 开始的4KB内存中，然后根据 ELF文件头 将内核代码读取到 0x10000(1MB) 处。由于 Boot Loader 和 ELF header 的目标都是加载内核，在内核加载完毕后它们的任务已经完成，所以它们占据的这部分空间都是可以重用的。从 0xA0000 到 0x100000 这部分空间是保留给 BIOS 以及硬件设备。而Kernel被加载到 0x100000 开始的大约100KB空间。
+我们接着看`mem_init`函数，part1我们已经分析到了`check_page`函数。接下来执行到了`check_kern_pgdir`函数：
+
+```JavaScript
+void
+mem_init(void)
+{
+	uint32_t cr0;
+	size_t n;
+
+	// Find out how much memory the machine has (npages & npages_basemem).
+	i386_detect_memory();
+
+	kern_pgdir = (pde_t *) boot_alloc(PGSIZE);
+	memset(kern_pgdir, 0, PGSIZE);
+
+	kern_pgdir[PDX(UVPT)] = PADDR(kern_pgdir) | PTE_U | PTE_P;
+
+	pages = (struct PageInfo *)boot_alloc(npages * sizeof(struct PageInfo));
+	memset(pages, 0, npages * sizeof(struct PageInfo));
+
+	page_init();
+
+	check_page_free_list(1);
+	check_page_alloc();
+	check_page();
+
+	check_kern_pgdir();
 
 
-# 2.页表(page table)管理
+	lcr3(PADDR(kern_pgdir));
+
+	check_page_free_list(0);
+
+
+	cr0 = rcr0();
+	cr0 |= CR0_PE|CR0_PG|CR0_AM|CR0_WP|CR0_NE|CR0_MP;
+	cr0 &= ~(CR0_TS|CR0_EM);
+	lcr0(cr0);
+
+	check_page_installed_pgdir();
+}
+
+```
+
+# 2.内存分配
+
+在之后的实验中，我们将会经常遇到一种情况，多个不同的虚拟地址被同时映射到相同的物理页上面。这时我们需要记录一下每一个物理页上存在着多少不同的虚拟地址来引用它，这个值存放在这个物理页的`PageInfo`结构体的`pp_ref`成员变量中。当这个值变为0时，这个物理页才可以被释放。
+
+`check_page`函数是一个测试页面表管理例程，要使这个函数成功运行，我们首先需要完成 exercise4 中的几个函数，下面我们来详细分析一下这几个函数。
+
+## `pgdir_walk()`
+
+这个函数的原型是 `pgdir_walk(pde_t *pgdir, const void *va, int create)`，该函数的功能:给定一个页目录表指针 `pgdir` ，该函数应该返回线性地址`va`所对应的页表项指针。这个`pgdir`其实就是part1中我们初始化的`kern_pgdir`指针，它指向JOS中惟一的页目录表。所以在这里我们应该完成以下几个步骤：
+* 通过页目录表求得这个虚拟地址页目录项地址 `pg_dir_entry`；
+* 判断这个页目录项对应的页表是否已经在内存中；
+* 如果在，计算这个页表的基地址`page_table`，然后返回`va`所对应页表项的地址 `&page_table[PTX(va)]``;
+* 如果不在则分配新的页，并且把这个页的信息添加到页目录项`pg_dir_entry`中;
+* 如果create为false，则返回NULL。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 这个lab的核心就是要搞清楚 `x86` 的内存管理机制，强烈建议大家阅读Lab讲义、Lab搭配的[指导书](https://pdos.csail.mit.edu/6.828/2018/readings/i386/c05.htm) 和Lab已经提供的代码，对照着本文来进行理解。
 
@@ -209,7 +277,7 @@ mem_init(void)
 	kern_pgdir[PDX(UVPT)] = PADDR(kern_pgdir) | PTE_U | PTE_P;
 ```
 
-这指令就是在为页目录表添加第一个页目录表项。通过查看*memlayout.h*文件，我们可以看到，`UVPT`的定义是一个虚拟地址(线性地址) 0xef400000，从这个虚拟地址开始，存放的就是这个操作系统的页表，所以我们必须把这个虚拟地址和页表的物理地址映射起来，`PADDR(kern_pgdir)`就是在计算`kern_pgdir`所对应的真实物理地址。具体可看下图：
+这指令就是在为页目录表添加第一个页目录表项。通过查看*memlayout.h*文件，我们可以看到，`UVPT`的定义是一个虚拟地址(线性地址) 0xef400000，从这个虚拟地址开始，存放的就是这个操作系统的页表`kern_pgdir`，所以我们必须把这个虚拟地址和页表的物理地址映射起来，`PADDR(kern_pgdir)`就是在计算`kern_pgdir`所对应的真实物理地址。具体可看下图：
 
 ![avatar](./image/first_entry.png)
 
@@ -236,16 +304,12 @@ mem_init(void)
 
 至此，lab2的part1已经完成。
 
-接下来的`check_page`函数是一个测试页面表管理例程，要使这个函数成功运行，我们首先需要完成part2 exercise4 中的几个函数。
 
-part2主要是为了实现一些内存管理必要的函数，内存管理的知识点我们上面分析的已经差不多了，所以exercise 4就直接放在exercise篇中来实现。
 
-在之后的实验中，我们将会经常遇到一种情况，多个不同的虚拟地址被同时映射到相同的物理页上面。这时我们需要记录一下每一个物理页上存在着多少不同的虚拟地址来引用它，这个值存放在这个物理页的`PageInfo`结构体的`pp_ref`成员变量中。当这个值变为0时，这个物理页才可以被释放。
+
+
 
 
 
 1. https://www.jianshu.com/p/752b7735a65b
 2. https://pdos.csail.mit.edu/6.828/2018/readings/i386/c05.htm
-3. https://github.com/shishujuan/mit6.828-2017/blob/master/docs/lab2-exercize.md
-4. https://blog.csdn.net/bysui/article/details/51471260
-5. https://github.com/Anarion-zuo/AnBlogs/blob/master/6.828/lab2-part2.md

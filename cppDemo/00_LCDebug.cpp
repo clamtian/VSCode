@@ -45,31 +45,11 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
     }
     return p1.second > p2.second;
 }
-typedef unsigned long long ULL;
-const int N = 100010;
-ULL h[N], p[N]; // h[k]存储字符串前k个字母的哈希值, p[k]存储 P^k mod 2^64
-int P = 133331;
-
-
-// 计算子串 str[l ~ r] 的哈希值
-ULL get(int l, int r){
-    return h[r] - h[l - 1] * p[r - l + 1];
-}
 
 class Solution {
 public:
     
 };
-
-
-vector<vector<int>> res;
-
-vector<vector<int>> func(int m, int n){
-    //巴拉巴拉
-}
-void dfs(int m, int n, vector<vector<int>> vec){
-    //巴拉巴拉
-}
 
 
 int main() {
