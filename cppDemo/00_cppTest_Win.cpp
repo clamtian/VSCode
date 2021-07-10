@@ -19,19 +19,25 @@
 #include<iomanip>
 using namespace std;
 
-
-const double eps = 1e-7;
-int main()
-{
-    double x;
-    cin >> x;
-    double l = -x, r = x;
-    while(r - l > eps){
-        double mid = (l + r) / 2;
-        if(mid * mid * mid > x) r = mid;
-        else l = mid;
+void quickSort(vector<int>& nums, int l, int r){
+    if(l >= r) return;
+    int i = l - 1, j = r + 1, x = nums[l + r >> 1];
+    while(i < j){
+        do ++i; while(nums[i] < x);
+        do --j; while(nums[j] > x);
+        if(i < j) swap(nums[i], nums[j]);
     }
-    cout << fixed << setprecision(6) << l << endl;
-    
-    return 1;
+    quickSort(nums, l, j);
+    quickSort(nums, j + 1, r);
+}
+
+
+int main(){
+    int n;
+    scanf("%d", &n);
+    vector<int> nums(n, 0);
+    for(int i = 0; i < n; ++i) scanf("%d", &nums[i]);
+    quickSort(nums, 0, n - 1);
+    for(int i = 0; i < n; ++i) printf("%d ", &nums[i]);
+    return 0;
 }

@@ -52,8 +52,45 @@ public:
 };
 
 
+class TimeMap {
+public:
+    /** Initialize your data structure here. */
+    TimeMap() {
+
+    }
+    
+    void set(string key, string value, int timestamp) {
+        //umap[key] = map<int, string>();
+        umap[key][timestamp] = value;
+        cout << "set succeed" << endl;
+    }
+    
+    string get(string key, int timestamp) {
+        if(umap.find(key) == umap.end()) return "";
+        map<int, string> m = umap[key];
+        cout << m.begin()->first << endl;
+        cout << m.begin()->second << endl;
+        auto it = m.lower_bound(timestamp);
+        return it->second;
+    }
+private:
+    unordered_map<string, map<int, string>> umap;
+};
+
+
+
 int main() {
 
+
+
+
+    TimeMap ti;
+    ti.set("foo", "bar", 1);
+    ti.get("foo", 1);
+    ti.get("foo", 3);
+    ti.set("foo", "bar2", 4);
+    ti.get("foo", 4);
+    ti.get("foo", 5);
     string str1 = "ac";
     string str2 = "aba";
     cout << max(str1, str2) << endl;
@@ -103,6 +140,5 @@ int main() {
                                       {"1", "1", "1", "1", "1"},
                                       {"1", "0", "0", "1", "0"} };
     Solution so;
-    so.displayTable(svec);
     return 0;
 }
