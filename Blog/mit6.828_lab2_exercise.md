@@ -129,6 +129,16 @@ page_free(struct PageInfo *pp)
 
 > 一些理论和操作性的东西，理论篇已经分析过了。
 
+## Question
+> Assuming that the following JOS kernel code is correct, what type should variable x have, uintptr_t or physaddr_t?
+> ```JavaScript
+>	mystery_t x;
+>	char* value = return_a_pointer();
+>	*value = 10;
+>	x = (mystery_t) value;
+> ```
+
+由于我们在代码中使用的指针都是虚拟地址，所以 `x` 的类型应是 `uintptr_t`。
 
 # Exercise 4
 > In the file *kern/pmap.c*, you must implement code for the following functions.
@@ -259,5 +269,48 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 }
 ```
 
+# Exercise 5
+> Fill in the missing code in `mem_init()` after the call to `check_page()`.
+> Your code should now pass the `check_kern_pgdir()` and `check_page_installed_pgdir()` checks.
 
+在`mem_init()` 中`check_page()`后添加以下内容：
 
+```JavaScript
+	boot_map_region(kern_pgdir, UPAGES, PTSIZE, PADDR(pages), PTE_U);
+	boot_map_region(kern_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_W);
+	boot_map_region(kern_pgdir, KERNBASE, 0xffffffff - KERNBASE, 0, PTE_W);
+```
+
+上述添加代码的具体功能我们在理论篇中已经分析过了，这里就不再赘述。
+
+## Question
+
+感谢[busui](https://blog.csdn.net/bysui/article/details/51471788)，题解大部分从他那里借鉴得来。
+
+> What entries (rows) in the page directory have been filled in at this point? What addresses do they map and where do they point? 
+
+|   Entry  |        Base Virtual Address          |    Points to (logically)   |
+|   1024   |        0xffc00000                    |    kernel space            |
+|   ...    |        ...                           |    kernel space            |
+|   960    |        0xf0000000(KERNBASE)          |    kernel space            |
+|   959    |        0xeffc0000(KSTACKTOP-KSTSIZE) |    bootstack               |
+|   957    |        0xef400000(UVPT)              |    kern_pgdir              |
+|   956    |        0xef000000(UPAGES)            |    pages                   | 
+
+基本上就是我们在exercise5中完成的那几个映射区域。具体地以UPAGES为例，这部分映射的地址是pages数组对应的物理地址，UPAGES的地址为0xef000000，取其二进制的前十位11 1011 1100就得到其所在的entry，即956.
+
+> We have placed the kernel and user environment in the same address space. Why will user programs not be able to read or write the kernel's memory? What specific mechanisms protect the kernel memory?
+
+用户程序不能去随意修改内核中的代码，数据，否则可能会破坏内核，造成程序崩溃。正常的操作系统通常采用两个部件来完成对内核地址的保护，一个是通过段机制来实现的，但是JOS中的分段功能并没有实现。二就是通过分页机制来实现，通过把页表项中的 PTE_U 置0，那么用户态的代码就不能访问内存中的这个页。
+
+> What is the maximum amount of physical memory that this operating system can support? Why?
+
+pages数组映射到的线性地址UPAGES为4MB，也就是JOS利用一个大小为4MB的空间UPAGES来存放所有的页的PageInfo结构体信息，每个结构体的大小为8B，所以一共可以存放512K个PageInfo结构体，所以一共可以出现512K个物理页，每个物理页大小为4KB，自然总的物理内存占2GB。
+
+> How much space overhead is there for managing memory, if we actually had the maximum amount of physical memory? How is this overhead broken down?
+
+首先需要存放所有的PageInfo，需要4MB，需要存放页目录表kern_pgdir，大小为 $1024 \times 4B = 4KB$，还需要存放所有的页表，大小为 $2GB \div 4KB \times 4B = 2MB$。所以总的开销就是 $6MB + 4KB$。
+
+> Revisit the page table setup in *kern/entry.S* and *kern/entrypgdir.c*. Immediately after we turn on paging, EIP is still a low number (a little over 1MB). At what point do we transition to running at an EIP above `KERNBASE`? What makes it possible for us to continue executing at a low EIP between when we enable paging and when we begin running at an EIP above `KERNBASE`? Why is this transition necessary?
+
+在*entry.S*文件中有一个指令 `jmp *%eax`，这个指令要完成跳转，就会重新设置EIP的值，把它设置为寄存器eax中的值，而这个值是大于`KERNBASE`的，所以就完成了EIP从小的值到大于`KERNBASE`的值的转换。在`entry_pgdir`这个页表中，也把虚拟地址空间[0, 4MB)映射到物理地址空间[0, 4MB)上，所以当访问位于[0, 4MB)之间的虚拟地址时，可以把它们转换为物理地址。

@@ -50,7 +50,7 @@ void quickSort(vector<int>& vec, int l, int r){
 
 
 int main(){
-    vector<int> nums = { 5,1,1,2,0,0 };
+    vector<int> nums = { 49, 59 ,88, 37, 98, 97, 68 ,54 ,31 ,3 };
     int n = nums.size();
     quickSort(nums, 0, n - 1);
     return 1;

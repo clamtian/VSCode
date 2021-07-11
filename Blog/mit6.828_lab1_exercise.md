@@ -71,6 +71,7 @@ gs             0x0                 0
    0x7c10:	mov    $0xd1,%al
 ```
 *b *address* 是在address这个位置设置一个断点；*c* 是运行到下一个断点；*info register* 查看寄存器内容；*si* 执行下一条指令；*x /Ni address* 查看包含address在内的接下来的N条指令(但不执行)。
+
 ## Question
 > At what point does the processor start executing 32-bit code? What exactly causes the switch from 16- to 32-bit mode?
 

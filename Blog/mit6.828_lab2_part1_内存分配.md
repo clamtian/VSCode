@@ -242,10 +242,47 @@ part2主要是为了实现一些内存管理必要的函数，内存管理的知
 
 在之后的实验中，我们将会经常遇到一种情况，多个不同的虚拟地址被同时映射到相同的物理页上面。这时我们需要记录一下每一个物理页上存在着多少不同的虚拟地址来引用它，这个值存放在这个物理页的`PageInfo`结构体的`pp_ref`成员变量中。当这个值变为0时，这个物理页才可以被释放。
 
+# 5.初始化内核地址空间
 
+JOS把4G的虚拟空间划分成两个部分。其中用户环境（进程运行环境）通常占据低地址的那部分，叫用户地址空间。而操作系统内核总是占据高地址的部分，叫内核地址空间。这两个部分的分界线是定义在memlayout.h文件中的一个宏 ULIM(0xef800000)。JOS为内核保留了接近256MB的虚拟地址空间。
+
+由于内核和用户进程只允许访问各自的地址空间，因此我们必须使用x86页表中的权限位来控制权限，使得只允许用户代码访问地址空间的用户部分。否则，用户代码中的错误可能会覆盖内核数据，导致崩溃或其它故障；用户代码还可能窃取其他进程的私有数据。请注意，可写权限位（PTE_W）会同时影响用户权限和内核权限。用户地址空间的代码没有对 ULIM 以上的内存的权限，而内核代码将能够读写此内存。对于地址范围[UTOP，ULIM)，内核代码和用户代码具有相同的权限：它们可以读取此地址的数据但是不能更改。此地址范围用于将某些内核数据结构只读地公开给用户代码。在UTOP之下的地址范围是给用户进程使用的，用户进程可以访问以及修改这部分地址空间的内容。
+
+现在我们将要来完成内核空间的虚拟地址映射，即UTOP之上的虚拟地址映射。这部分内容对应exercise5的部分。
+
+首先我们要把分配器pages数组映射到线性地址UPAGES，大小为一个PTSIZE。至于为什么大小是一个PTSIEZ，这部分我做了一些思考：跟踪操作系统的初始化过程，可以看到总的内存页数npages是32768页，而一个PageInfo的大小是8B，这样，pages数组的大小理论上为 $32768 \times 8B = 256KB$。然而在映射的时候却映射了一个PTSIZE，也就是4MB，这是为了给拓展物理内存留下位置，后面question也会讲到，JOS可支持的最大物理内存为2GB。
+
+```JavaScript
+  	boot_map_region(kern_pgdir, UPAGES, PTSIZE, PADDR(pages), PTE_U);
+```
+注意这部分的权限设置为 PTE_U 是因为这部分内存内容是用户代码和内核代码都可读的。
+
+然后是内核的堆栈区域，把由bootstack变量所标记的物理地址范围映射给内核的堆栈。bootstack变量是内核已经初始化好的，物理地址为0x0010f000，存在于内核代码所在的内存区域中。内核堆栈的虚拟地址范围是[KSTACKTOP-PTSIZE, KSTACKTOP)，不过要把这个范围划分成两部分：
+* [KSTACKTOP-KSTKSIZE, KSTACKTOP) 这部分进行映射；
+* [KSTACKTOP-PTSIZE, KSTACKTOP-KSTKSIZE) 这部分不进行映射。
+这里面采用了保护页的做法，就是在规定的栈大小的后面放置一块内容为invalid的内存部分，这样当栈溢出的时候会触发错误，而不是毁掉更低地址的内存。
+
+```JavaScript
+  	boot_map_region(kern_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_W);
+```
+
+最后映射整个操作系统内核，虚拟地址范围是[KERNBASE, 2^32]，物理地址范围是[0，2^32 - KERNBASE]。访问权限是内核代码可以读写，用户代码无权访问。
+
+```JavaScript
+  	boot_map_region(kern_pgdir, KERNBASE, 0xffffffff - KERNBASE, 0, PTE_W);
+```
+
+经过上面代码进行的内存映射后，我们的虚拟地址与物理地址的映射关系如下：
+
+![avatar](./image/lab2内存使用情况4.png)
+
+上面我漏画了一段，那就是 `kern_pgdir[PDX(UVPT)] = PADDR(kern_pgdir) | PTE_U | PTE_P;` 这句代码所执行的将`kern_pgdir`中的一个页目录项映射到了UVPT的位置上。
+
+至此，lab2除了challenge的内容已经全部完成。
 
 1. https://www.jianshu.com/p/752b7735a65b
 2. https://pdos.csail.mit.edu/6.828/2018/readings/i386/c05.htm
 3. https://github.com/shishujuan/mit6.828-2017/blob/master/docs/lab2-exercize.md
 4. https://blog.csdn.net/bysui/article/details/51471260
 5. https://github.com/Anarion-zuo/AnBlogs/blob/master/6.828/lab2-part2.md
+6. https://github.com/Clann24/jos/tree/master/lab2

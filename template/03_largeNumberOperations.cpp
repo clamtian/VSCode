@@ -33,7 +33,7 @@ vector<int> add(vector<int> &A, vector<int> &B){
     return C;
 }
 
-// C = A - B  A >= B A >= 0 B >= 0
+// C = A - B  A >= B A >= 0 B >= 0 
 vector<int> sub(vector<int> &A, vector<int> &B){
     vector<int> C;
     for (int i = 0, t = 0; i < A.size(); i ++ ){
@@ -48,7 +48,7 @@ vector<int> sub(vector<int> &A, vector<int> &B){
     return C;
 }
 
-// C = A * b A >= 0 b >= 0
+// C = A * b A >= 0    0 <= b <= 10000
 vector<int> mul(vector<int> A, int b){
     
     vector<int> C;
