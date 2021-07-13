@@ -48,7 +48,33 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 
 class Solution {
 public:
-    
+    vector<vector<int>> getSkyline(vector<vector<int>>& b) {
+
+        auto cm = [](const vector<int> a, const vector<int> b){ return a[1] < b[1]; };
+        priority_queue<vector<int>, vector<vector<int>>, decltype(cm)> q(cm);
+
+        int n = b.size();
+        vector<int> boundaries;
+        for(int i = 0; i < n; ++i){
+            boundaries.push_back(b[i][0]);
+            boundaries.push_back(b[i][1]);
+        }
+        sort(boundaries.begin(), boundaries.end());
+        int idx = 0;
+        vector<vector<int>> res;
+        for(auto& boundary : boundaries){
+            while(idx < 2 * n && b[idx][0] <= boundary){
+                q.push({ b[idx][1], b[idx][2]});
+                ++idx;
+            }
+            while(!q.empty() && q.top()[0] <= boundary){
+                q.pop();
+            }
+            int h = q.empty() ? 0 : q.top()[1];
+            if(res.size() == 0 || res.back()[1] != h) res.push_back({ boundary, h });
+        }
+        return res;
+    }
 };
 
 
@@ -94,7 +120,7 @@ int main() {
     string str1 = "ac";
     string str2 = "aba";
     cout << max(str1, str2) << endl;
-    vector<vector<int>> a = {{0,1,2,3,4},{2,3,4},{4,0,1,2,3}};
+    vector<vector<int>> a = {{2,9,10},{3,7,15},{5,12,12},{15,20,10},{19,24,8}};
     vector<int> b = { 3,5,8,8,8,10,11,12 };
     vector<int> b_ = { 45,57,38,64,52,92,31,57,31,52,3,12,93,8,11,60,55,92,42,27,40,10,77,53,8,34,87,39,8,35,28,70,32,97,88,54,82,54,54,10,78,23,82,52,10,49,8,36,9,52,81,26,5,2,30,39,89,62,39,100,67,33,86,22,49,15,94,59,47,41,45,17,99,87,77,48,22,77,82,85,97,66,3,38,49,60,66 };
 
@@ -140,5 +166,6 @@ int main() {
                                       {"1", "1", "1", "1", "1"},
                                       {"1", "0", "0", "1", "0"} };
     Solution so;
+    so.getSkyline(a);
     return 0;
 }
