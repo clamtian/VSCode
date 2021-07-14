@@ -45,6 +45,24 @@ bool cmp(vector<int>& A, vector<int>& B){
     }
     return true;
 }
+
+
+struct ElF{
+
+    uint16_t e_magic;  //是否是ELF文件
+    uint16_t e_phoff; // 偏移值
+    uint16_t e_phnum;  //头部个数
+    uint16_t e_entry; //程序入口点
+    //...............//
+
+};
+
+
+
+
+
+
+
 int main(){
     
     string s1, s2;
