@@ -48,81 +48,37 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 
 class Solution {
 public:
-    vector<vector<int>> getSkyline(vector<vector<int>>& b) {
-
-        auto cm = [](const vector<int> a, const vector<int> b){ return a[1] < b[1]; };
-        priority_queue<vector<int>, vector<vector<int>>, decltype(cm)> q(cm);
-
-        int n = b.size();
-        vector<int> boundaries;
+    int MOD = 1e9 + 7;
+    int minAbsoluteSumDiff(vector<int>& nums1, vector<int>& nums2) {
+        vector<vector<int>> cop;
+        int n = nums1.size(), ans = 0;
+        for(int i = 0; i < n; ++i) cop.push_back({ nums2[i], nums1[i] });
+        sort(cop.begin(), cop.end());
         for(int i = 0; i < n; ++i){
-            boundaries.push_back(b[i][0]);
-            boundaries.push_back(b[i][1]);
-        }
-        sort(boundaries.begin(), boundaries.end());
-        int idx = 0;
-        vector<vector<int>> res;
-        for(auto& boundary : boundaries){
-            while(idx < 2 * n && b[idx][0] <= boundary){
-                q.push({ b[idx][1], b[idx][2]});
-                ++idx;
+            int l = 0, r = n - 1;
+            while(l < r){
+                int mid = l + r >> 1;
+                if(cop[mid][0] > nums1[i]) r = mid;
+                else l = mid + 1;
             }
-            while(!q.empty() && q.top()[0] <= boundary){
-                q.pop();
-            }
-            int h = q.empty() ? 0 : q.top()[1];
-            if(res.size() == 0 || res.back()[1] != h) res.push_back({ boundary, h });
+            int cmp = 0;
+            cmp = min(cmp, abs(nums1[i] - cop[l][0]) - abs(cop[l][1] - cop[l][0]));
+            if(l != n - 1) cmp = min(cmp, abs(nums1[i] - cop[l + 1][0]) - abs(cop[l + 1][1] - cop[l + 1][0]));
+            if(l != 0) cmp = min(cmp, abs(nums1[i] - cop[l - 1][0]) - abs(cop[l - 1][1] - cop[l - 1][0]));
+            ans = min(ans, cmp);
         }
-        return res;
+        for(int i = 0; i < n; ++i) ans = ans % MOD + abs(nums1[i] - nums2[i]);
+        return ans;
     }
-};
-
-
-class TimeMap {
-public:
-    /** Initialize your data structure here. */
-    TimeMap() {
-
-    }
-    
-    void set(string key, string value, int timestamp) {
-        //umap[key] = map<int, string>();
-        umap[key][timestamp] = value;
-        cout << "set succeed" << endl;
-    }
-    
-    string get(string key, int timestamp) {
-        if(umap.find(key) == umap.end()) return "";
-        map<int, string> m = umap[key];
-        cout << m.begin()->first << endl;
-        cout << m.begin()->second << endl;
-        auto it = m.lower_bound(timestamp);
-        return it->second;
-    }
-private:
-    unordered_map<string, map<int, string>> umap;
 };
 
 
 
 int main() {
 
-
-
-
-    TimeMap ti;
-    ti.set("foo", "bar", 1);
-    ti.get("foo", 1);
-    ti.get("foo", 3);
-    ti.set("foo", "bar2", 4);
-    ti.get("foo", 4);
-    ti.get("foo", 5);
-    string str1 = "ac";
-    string str2 = "aba";
-    cout << max(str1, str2) << endl;
     vector<vector<int>> a = {{2,9,10},{3,7,15},{5,12,12},{15,20,10},{19,24,8}};
-    vector<int> b = { 3,5,8,8,8,10,11,12 };
-    vector<int> b_ = { 45,57,38,64,52,92,31,57,31,52,3,12,93,8,11,60,55,92,42,27,40,10,77,53,8,34,87,39,8,35,28,70,32,97,88,54,82,54,54,10,78,23,82,52,10,49,8,36,9,52,81,26,5,2,30,39,89,62,39,100,67,33,86,22,49,15,94,59,47,41,45,17,99,87,77,48,22,77,82,85,97,66,3,38,49,60,66 };
+    vector<int> b = { 1,7,5 };
+    vector<int> b_ = { 2,3,5 };
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
                                {'0', '1', '0'},
@@ -166,6 +122,6 @@ int main() {
                                       {"1", "1", "1", "1", "1"},
                                       {"1", "0", "0", "1", "0"} };
     Solution so;
-    so.getSkyline(a);
+    so.minAbsoluteSumDiff(b, b_);
     return 0;
 }

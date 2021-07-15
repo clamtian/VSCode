@@ -63,7 +63,7 @@ vector<int> mul(vector<int> A, int b){
     return C;
 }
 
-// C = A * b A >= 0    0 < b <= 10000
+// C = A / b  A >= 0    0 < b <= 10000
 vector<int> div(vector<int>& A, int b, int& r){
     vector<int> C;
     r = 0;

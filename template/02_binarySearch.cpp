@@ -18,7 +18,7 @@ using namespace std;
 
 bool check(int k){/* ... */}
 /*
-* mid打到左端点 往右推 寻找最后一个的时候使用
+* mid打到左端点 往右推
 */
 int binarySearch(int l, int r){
     while(l < r){
@@ -30,7 +30,7 @@ int binarySearch(int l, int r){
 }
 
 /*
-* mid打到右端点 往左推 寻找第一个的时候使用
+* mid打到右端点 往左推
 */
 int binarySearch(int l, int r){
     while(l < r){
