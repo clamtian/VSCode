@@ -19,49 +19,53 @@
 #include<iomanip>
 using namespace std;
 
-vector<int> sub(vector<int>& A, vector<int>& B){
-    int m = A.size(), n = B.size();
-    int t = 0;
-    vector<int> res;
-    for(int i = 0; i < m; ++i){
-        t = A[i] - t;
-        if(i < n) t -= B[i];
-        res.push_back((t + 10) % 10);
-        if(t < 0) t = 1;
-        else t = 0;
-    }
-    while(res.size() > 1 && res.back() == 0) res.pop_back();
-    
-    return res;
-}
-bool cmp(vector<int>& A, vector<int>& B){
-    int m = A.size(), n = B.size();
-    if(m > n) return true;
-    if(m == n){
-        for(int i = m - 1; i >= 0; --i){
-            if(A[i] < B[i]) return false;
-            if(A[i] > B[i]) return true;
-        }
-    }
-    return true;
-}
-
+struct Node{
+    int val;
+    Node* next;
+    Node(int v) : val(v), next(nullptr) {}
+};
 
 
 int main(){
-    
-    string s1, s2;
-    cin >> s1 >> s2;
-    vector<int> num1, num2;
-    for(int i = s1.size() - 1; i >= 0; --i) num1.push_back(s1[i] - '0');
-    for(int i = s2.size() - 1; i >= 0; --i) num2.push_back(s2[i] - '0');
-    vector<int> res;
-    if(cmp(num1, num2)) res = sub(num1, num2);
-    else{
-        cout << "-";
-        res = sub(num2, num1);
+    vector<Node*> vec;
+    int m;
+    cin >> m;
+    char op;
+    Node* head, *node, *next, *newNode;
+    int pos, val;
+    while(m--){
+        cin >> op;
+        switch(op){
+            case 'H' : 
+                cin >> val;
+                node = new Node(val);
+                vec.push_back(node);
+                node->next = head;
+                head = node;
+                break;
+            case 'I':
+                cin >> pos >> val;
+                node = vec[pos - 1];
+                newNode = new Node(val);
+                newNode->next = node->next;
+                node->next = newNode;
+                vec.push_back(newNode);
+                break;
+            case 'D':
+                cin >> pos;
+                if(pos == 0) head = head->next;
+                else{
+                    node = vec[pos - 1];
+                    next = node->next;
+                    node->next = next->next;
+                    break;
+                }
+        }
     }
-    for(int i = res.size() - 1; i >= 0; --i) cout << res[i];
-    
+    node = head;
+    while(node){
+        cout << node->val << " ";
+        node = node->next;
+    }
     return 0;
 }
