@@ -19,53 +19,43 @@
 #include<iomanip>
 using namespace std;
 
-struct Node{
-    int val;
-    Node* next;
-    Node(int v) : val(v), next(nullptr) {}
-};
-
-
 int main(){
-    vector<Node*> vec;
     int m;
     cin >> m;
     char op;
-    Node* head, *node, *next, *newNode;
-    int pos, val;
+    vector<int> e, ne;
+    int pos, val, head = -1;
+    
     while(m--){
         cin >> op;
         switch(op){
-            case 'H' : 
+            case 'D':
+                cin >> pos;
+                if(pos == 0) head = ne[head];
+                else{
+                    ne[pos - 1] = ne[ne[pos - 1]];
+                } 
+                break;
+            case 'H':
                 cin >> val;
-                node = new Node(val);
-                vec.push_back(node);
-                node->next = head;
-                head = node;
+                e.push_back(val);
+                ne.push_back(head);
+                head = e.size() - 1;
                 break;
             case 'I':
                 cin >> pos >> val;
-                node = vec[pos - 1];
-                newNode = new Node(val);
-                newNode->next = node->next;
-                node->next = newNode;
-                vec.push_back(newNode);
+                e.push_back(val);
+                ne.push_back(ne[pos - 1]);
+                ne[pos - 1] = e.size() - 1;
                 break;
-            case 'D':
-                cin >> pos;
-                if(pos == 0) head = head->next;
-                else{
-                    node = vec[pos - 1];
-                    next = node->next;
-                    node->next = next->next;
-                    break;
-                }
         }
     }
-    node = head;
-    while(node){
-        cout << node->val << " ";
-        node = node->next;
+    
+    while(head != -1){
+        cout << e[head] << " ";
+        head = ne[head];
     }
+    
+    
     return 0;
 }
