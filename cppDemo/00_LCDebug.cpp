@@ -48,27 +48,28 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 
 class Solution {
 public:
-    int MOD = 1e9 + 7;
-    int minAbsoluteSumDiff(vector<int>& nums1, vector<int>& nums2) {
-        vector<vector<int>> cop;
-        int n = nums1.size(), ans = 0;
-        for(int i = 0; i < n; ++i) cop.push_back({ nums2[i], nums1[i] });
-        sort(cop.begin(), cop.end());
-        for(int i = 0; i < n; ++i){
-            int l = 0, r = n - 1;
-            while(l < r){
-                int mid = l + r >> 1;
-                if(cop[mid][0] > nums1[i]) r = mid;
-                else l = mid + 1;
-            }
-            int cmp = 0;
-            cmp = min(cmp, abs(nums1[i] - cop[l][0]) - abs(cop[l][1] - cop[l][0]));
-            if(l != n - 1) cmp = min(cmp, abs(nums1[i] - cop[l + 1][0]) - abs(cop[l + 1][1] - cop[l + 1][0]));
-            if(l != 0) cmp = min(cmp, abs(nums1[i] - cop[l - 1][0]) - abs(cop[l - 1][1] - cop[l - 1][0]));
-            ans = min(ans, cmp);
+    int maxFrequency(vector<int>& nums, int k) {
+        int n = nums.size();
+        sort(nums.begin(), nums.end());
+        vector<int> sum(n + 1, 0);
+        for(int i = 1; i <= n; ++i) sum[i] = sum[i - 1] + nums[i - 1];
+        int l = 1, r = n;
+        while(l < r){
+            int mid = l + r + 1 >> 1;
+            if(check(sum, nums, k, mid)) l = mid;
+            else r = mid - 1;
         }
-        for(int i = 0; i < n; ++i) ans = ans % MOD + abs(nums1[i] - nums2[i]);
-        return ans;
+        return l;
+    }
+
+    bool check(vector<int>& sum, vector<int>& nums, int k, int t){
+        int n = sum.size();
+        for(int i = t; i < n; ++i){
+            int s = sum[i] - sum[i - t];
+            s -= nums[i - t] * t;
+            if(t * nums[i - 1] - s <= k) return true;
+        }
+        return false;
     }
 };
 
@@ -77,7 +78,7 @@ public:
 int main() {
 
     vector<vector<int>> a = {{2,9,10},{3,7,15},{5,12,12},{15,20,10},{19,24,8}};
-    vector<int> b = { 1,7,5 };
+    vector<int> b = { 1,2,4 };
     vector<int> b_ = { 2,3,5 };
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
@@ -122,6 +123,6 @@ int main() {
                                       {"1", "1", "1", "1", "1"},
                                       {"1", "0", "0", "1", "0"} };
     Solution so;
-    so.minAbsoluteSumDiff(b, b_);
+    so.maxFrequency(b, 5);
     return 0;
 }
