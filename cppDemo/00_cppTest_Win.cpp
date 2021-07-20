@@ -20,42 +20,20 @@
 using namespace std;
 
 int main(){
-    int m;
-    cin >> m;
-    char op;
-    vector<int> e, ne;
-    int pos, val, head = -1;
     
-    while(m--){
-        cin >> op;
-        switch(op){
-            case 'D':
-                cin >> pos;
-                if(pos == 0) head = ne[head];
-                else{
-                    ne[pos - 1] = ne[ne[pos - 1]];
-                } 
-                break;
-            case 'H':
-                cin >> val;
-                e.push_back(val);
-                ne.push_back(head);
-                head = e.size() - 1;
-                break;
-            case 'I':
-                cin >> pos >> val;
-                e.push_back(val);
-                ne.push_back(ne[pos - 1]);
-                ne[pos - 1] = e.size() - 1;
-                break;
-        }
-    }
+    int *p;
+    allocator<int> al;
+    p = al.allocate(1);
+    cout << *p << endl;
+    cout << p << endl;
+    //al.deallocate(p, 1);
+
+
+    cout << *p << endl;
+    cout << p << endl;
     
-    while(head != -1){
-        cout << e[head] << " ";
-        head = ne[head];
-    }
-    
-    
+    delete p;
+    cout << *p << endl;
+    cout << p << endl;
     return 0;
 }
