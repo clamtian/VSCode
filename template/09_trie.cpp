@@ -16,7 +16,7 @@
 
 using namespace std;
 
-
+//找出每个数左边离它最近的比它大/小的数
 vector<int> monStack(vector<int>& nums){
     stack<int> sta;
     vector<int> res;
