@@ -1,44 +1,58 @@
 #include <iostream>
-#include <string>
 #include <vector>
 
 using namespace std;
 
-const int N = 100010;
-int son[N][26], cnt[N], idx = 0;
+const int N = 10;
 
-void insert(string& s){
-    int p = 0, n = s.size();
-    for(int i = 0; i < n; ++i){
-        int u = s[p] - 'a';
-        if(!son[p][u]) son[p][u] = ++idx;
-        p = son[p][u];
+int q[N], ph[N];
+int s = 0, tot = 1;
+
+int insert(int x){
+    int idx = s;
+    q[s++] = x;
+    while(q[idx] < q[(idx - 1) / 2]){
+        swap(q[idx], q[(idx - 1) / 2]);
+        idx = (idx - 1) / 2;
     }
-    cnt[p]++;
+    return idx;
 }
 
-int search(string& s){
-    int p = 0, n = s.size();
-    for(int i = 0; i < n; ++i){
-        int u = s[i] - 'a';
-        if(!son[p][u]) return 0;
-        p = son[p][u];
+void pop(int idx){
+    int l = idx * 2 + 1;
+    while(l < s){
+        int t = l + 1 < s && q[l + 1] < q[l] ? l + 1 : l;
+        t = q[t] < q[idx] ? t : idx;
+        if(t == idx) break;
+        swap(q[t], q[idx]);
+        idx = t;
+        l = idx * 2 + 1;
     }
-    return cnt[p];
 }
-
 
 int main(){
-    
     int n = 0;
     cin >> n;
-    string op, str;
+    string op;
+    int a = 0, b = 0;
     while(n--){
-        cin >> op >> str;
-        if(op == "I") insert(str);
-        else{
-            int c = search(str);
-            cout << c << endl;
+        cin >> op;
+        if(op == "I"){
+            cin >> a;
+            ph[tot++] = insert(a);
+        }else if(op == "PM"){
+            cout << q[0] << endl;
+        }else if(op == "DM"){
+            swap(q[0], q[--s]);
+            pop(0);
+        }else if(op == "D"){
+            cin >> a;
+            swap(q[ph[a]], q[--s]);
+            pop(ph[a]);
+        }else{
+            cin >> a >> b;
+            q[ph[a]] = b;
+            pop(ph[a]);
         }
     }
     return 0;

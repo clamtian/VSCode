@@ -16,52 +16,20 @@
 
 using namespace std;
 
-const int N = 100010;
-int son[N][26], cnt[N], idx = 0;
-
-// 0号点既是根节点，又是空节点
-// son[][]存储树中每个节点的子节点
-// cnt[]存储以每个节点结尾的单词数量
-
-
-// 插入一个字符串
-void insert(string& s){
-    int p = 0, n = s.size();
+//找出每个数左边离它最近的比它大/小的数
+vector<int> monStack(vector<int>& nums){
+    stack<int> sta;
+    vector<int> res;
+    int n = nums.size();
     for(int i = 0; i < n; ++i){
-        int u = s[i] - 'a';
-        if(!son[p][u]) son[p][u] = ++idx;
-        p = son[p][u];
-    }
-    cnt[p]++;
-}
-
-
-// 查询字符串出现的次数
-int search(string& s){
-    int p = 0, n = s.size();
-    for(int i = 0; i < n; ++i){
-        int u = s[i] - 'a';
-        if(!son[p][u]) return 0;
-        p = son[p][u];
-    }
-    return cnt[p];
-}
-
-
-int main(){
-    
-    int n = 0;
-    cin >> n;
-    string op, str;
-    while(n--){
-        cin >> op >> str;
-        if(op == "I") insert(str);
-        else{
-            int c = search(str);
-            cout << c << endl;
+        while(!sta.empty() && sta.top() >= nums[i]){
+            sta.pop();
         }
+        if(sta.empty()) res.push_back(-1);
+        else res.push_back(sta.top());
+        sta.push(nums[i]);
     }
-    return 0;
+    return res;
 }
 
 
