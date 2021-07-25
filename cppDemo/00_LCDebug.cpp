@@ -48,28 +48,18 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 
 class Solution {
 public:
-    int maxFrequency(vector<int>& nums, int k) {
-        int n = nums.size();
-        sort(nums.begin(), nums.end());
-        vector<int> sum(n + 1, 0);
-        for(int i = 1; i <= n; ++i) sum[i] = sum[i - 1] + nums[i - 1];
-        int l = 1, r = n;
-        while(l < r){
-            int mid = l + r + 1 >> 1;
-            if(check(sum, nums, k, mid)) l = mid;
-            else r = mid - 1;
+    string maximumNumber(string num, vector<int>& ch) {
+        int n = num.size();
+        int i = 0;
+        for(; i < n; ++i){
+            if(num[i] - '0' < ch[num[i] - '0']) break;
         }
-        return l;
-    }
-
-    bool check(vector<int>& sum, vector<int>& nums, int k, int t){
-        int n = sum.size();
-        for(int i = t; i < n; ++i){
-            int s = sum[i] - sum[i - t];
-            s -= nums[i - t] * t;
-            if(t * nums[i - 1] - s <= k) return true;
+        while(i < n && num[i] - '0' < ch[num[i] - '0']){
+            num[i] = ch[num[i] - '0'] + '0';
+            ++i;
+            cout << i<< endl;
         }
-        return false;
+        return num;
     }
 };
 
@@ -78,7 +68,7 @@ public:
 int main() {
 
     vector<vector<int>> a = {{2,9,10},{3,7,15},{5,12,12},{15,20,10},{19,24,8}};
-    vector<int> b = { 1,2,4 };
+    vector<int> b = { 6,7,9,7,4,0,3,4,4,7 };
     vector<int> b_ = { 2,3,5 };
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
@@ -123,6 +113,6 @@ int main() {
                                       {"1", "1", "1", "1", "1"},
                                       {"1", "0", "0", "1", "0"} };
     Solution so;
-    so.maxFrequency(b, 5);
+    so.maximumNumber("214010", b);
     return 0;
 }
