@@ -21,6 +21,7 @@ using namespace std;
 
 typedef long long LL;
 int MOD = 1e9 + 7;
+const int N = 1e5;
 struct ListNode {
     int val;
     ListNode* next;
@@ -48,28 +49,29 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 
 class Solution {
 public:
-    int maxFrequency(vector<int>& nums, int k) {
-        int n = nums.size();
-        sort(nums.begin(), nums.end());
-        vector<int> sum(n + 1, 0);
-        for(int i = 1; i <= n; ++i) sum[i] = sum[i - 1] + nums[i - 1];
-        int l = 1, r = n;
-        while(l < r){
-            int mid = l + r + 1 >> 1;
-            if(check(sum, nums, k, mid)) l = mid;
-            else r = mid - 1;
+    int minOperations(vector<int>& target, vector<int>& arr) {
+        int n = target.size(), m = arr.size();
+        unordered_map<int, int> umap;
+        for(int i = 0; i < n; ++i) umap[target[i]] = i;
+        for(int i = 0; i < m; ++i){
+            if(umap.find(arr[i]) != umap.end()) arr[i] = umap[arr[i]];
+            else arr[i] = -1;
         }
-        return l;
-    }
-
-    bool check(vector<int>& sum, vector<int>& nums, int k, int t){
-        int n = sum.size();
-        for(int i = t; i < n; ++i){
-            int s = sum[i] - sum[i - t];
-            s -= nums[i - t] * t;
-            if(t * nums[i - 1] - s <= k) return true;
+        vector<int> low = { arr[0] };
+        for(int i = 0; i < m; ++i){
+            if(arr[i] > low.back()) low.push_back(arr[i]);
+            else{
+                int l = 0, r = low.size();
+                while(l < r) {
+                    int mid = (l + r) >> 1;
+                    if(low[mid] < arr[i]) l = mid + 1;
+                    else r = mid;
+                }
+                low[l] = arr[i];
+            }
         }
-        return false;
+        if(low[0] != -1) return n - low.size();
+        return n - low.size() + 1;
     }
 };
 
@@ -77,19 +79,7 @@ public:
 
 int main() {
 
-    vector<vector<int>> a = {{2,9,10},{3,7,15},{5,12,12},{15,20,10},{19,24,8}};
-    vector<int> b = { 1,2,4 };
-    vector<int> b_ = { 2,3,5 };
-
-    vector<vector<char>> ch_vec = { {'1', '1', '1'},
-                               {'0', '1', '0'},
-                               {'1', '1', '1'} };
-    vector<vector<string>> svec = { {"David","3","Ceviche"},
-                                {"Corina","10","Beef Burrito"},
-                                {"David","3","Fried Chicken"},
-                                {"Carla","5","Water"},
-                                {"Carla","5","Ceviche"},
-                                {"Rous","3","Ceviche"} };
+    
     ListNode x1(5);
     ListNode x2(2);
     ListNode x3(3);
@@ -122,7 +112,22 @@ int main() {
                                       {"1", "0", "1", "1", "1"},
                                       {"1", "1", "1", "1", "1"},
                                       {"1", "0", "0", "1", "0"} };
+
+
+    vector<vector<int>> a = {{2,9,10},{3,7,15},{5,12,12},{15,20,10},{19,24,8}};
+    vector<int> b = { 16,7,20,11,15,13,10,14,6,8 };
+    vector<int> b_ = { 11,14,15,7,5,5,6,10,11,6 };
+
+    vector<vector<char>> ch_vec = { {'1', '1', '1'},
+                               {'0', '1', '0'},
+                               {'1', '1', '1'} };
+    vector<vector<string>> svec = { {"David","3","Ceviche"},
+                                {"Corina","10","Beef Burrito"},
+                                {"David","3","Fried Chicken"},
+                                {"Carla","5","Water"},
+                                {"Carla","5","Ceviche"},
+                                {"Rous","3","Ceviche"} };
     Solution so;
-    so.maxFrequency(b, 5);
+    so.minOperations(b, b_);
     return 0;
 }
