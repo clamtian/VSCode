@@ -21,7 +21,6 @@ using namespace std;
 
 typedef long long LL;
 int MOD = 1e9 + 7;
-const int N = 1e5;
 struct ListNode {
     int val;
     ListNode* next;
@@ -47,34 +46,52 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
     return p1.second > p2.second;
 }
 
+const int N = 6;
+int h[N], e[N], ne[N], sa[N], idx;
 class Solution {
 public:
-    int minOperations(vector<int>& target, vector<int>& arr) {
-        int n = target.size(), m = arr.size();
-        unordered_map<int, int> umap;
-        for(int i = 0; i < n; ++i) umap[target[i]] = i;
-        for(int i = 0; i < m; ++i){
-            if(umap.find(arr[i]) != umap.end()) arr[i] = umap[arr[i]];
-            else arr[i] = -1;
+    unordered_set<int> s;
+    vector<int> distanceK(TreeNode* root, TreeNode* target, int k) {
+        idx = 0;
+        memset(h, -1, sizeof(h));
+        dfs(root);
+        sa[target->val] = 1;
+        dfs2(target->val, k);
+        return vector<int>(s.begin(), s.end());
+    }
+    void dfs2(int a, int dis){
+        if(dis == 0){
+            s.insert(a);
+            return;
         }
-        vector<int> low = { arr[0] };
-        for(int i = 0; i < m; ++i){
-            if(arr[i] > low.back()) low.push_back(arr[i]);
-            else{
-                int l = 0, r = low.size();
-                while(l < r) {
-                    int mid = (l + r) >> 1;
-                    if(low[mid] < arr[i]) l = mid + 1;
-                    else r = mid;
-                }
-                low[l] = arr[i];
+        a = h[a];
+        while(a != -1){
+            if(sa[e[a]] == 0){
+                sa[e[a]] = 1;
+                dfs2(e[a], dis - 1);
             }
+            a = ne[a];
         }
-        if(low[0] != -1) return n - low.size();
-        return n - low.size() + 1;
+    }
+    void add(int a, int b){
+        e[idx] = b;
+        ne[idx] = h[a];
+        h[a] = idx++;
+    }
+    void dfs(TreeNode* root){
+        if(!root) return;
+        if(root->left){
+            add(root->val, root->left->val);
+            add(root->left->val, root->val);
+            dfs(root->left);
+        }
+        if(root->right){
+            add(root->val, root->right->val);
+            add(root->right->val, root->val);
+            dfs(root->right);
+        }
     }
 };
-
 
 
 int main() {
@@ -91,16 +108,18 @@ int main() {
     x2.next = &x1;
     ListNode* head = &x5;
 
+    TreeNode* r0 = new TreeNode(0);
     TreeNode* r1 = new TreeNode(1);
     TreeNode* r2 = new TreeNode(2);
     TreeNode* r3 = new TreeNode(3);
     TreeNode* r4 = new TreeNode(4);
     TreeNode* r5 = new TreeNode(5);
 
-    r1->left = r2;
-    r1->right = r3;
-    r3->left = r4;
-    r3->right = r5;
+    r0->left = r1;
+    r1->right = r2;
+    r0->right = r3;
+    //r3->left = r4;
+    //r3->right = r5;
 
 
     string t = "alex";
@@ -128,6 +147,6 @@ int main() {
                                 {"Carla","5","Ceviche"},
                                 {"Rous","3","Ceviche"} };
     Solution so;
-    so.minOperations(b, b_);
+    so.distanceK(r0, r1, 2);
     return 0;
 }
