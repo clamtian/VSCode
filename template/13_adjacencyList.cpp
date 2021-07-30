@@ -10,8 +10,7 @@ const int N = 100010;
 int h[N], e[N], ne[N], idx;
 
 // 添加一条边a->b
-void add(int a, int b)
-{
+void add(int a, int b){
     e[idx] = b, ne[idx] = h[a], h[a] = idx ++ ;
 }
 
