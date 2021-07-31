@@ -50,46 +50,22 @@ const int N = 6;
 int h[N], e[N], ne[N], sa[N], idx;
 class Solution {
 public:
-    unordered_set<int> s;
-    vector<int> distanceK(TreeNode* root, TreeNode* target, int k) {
-        idx = 0;
-        memset(h, -1, sizeof(h));
-        dfs(root);
-        sa[target->val] = 1;
-        dfs2(target->val, k);
-        return vector<int>(s.begin(), s.end());
-    }
-    void dfs2(int a, int dis){
-        if(dis == 0){
-            s.insert(a);
-            return;
-        }
-        a = h[a];
-        while(a != -1){
-            if(sa[e[a]] == 0){
-                sa[e[a]] = 1;
-                dfs2(e[a], dis - 1);
+    int longestAwesome(string s) {
+        int n = s.size();
+        unordered_map<int, int> m;
+        m[-1] = 0;
+        int state = 0, ans = 0;
+        for(int i = 0; i < n; ++i){
+            int f = (1 << (s[i] - '0'));
+            state ^= f;
+            if(m.find(state) != m.end()) ans = max(ans, i - m[state]);
+            else m[state] = i;
+            for(int k = 0; k < 10; ++k){
+                int tar = state ^ (1 << k);
+                if(m.find(tar) != m.end()) ans = max(ans, i - m[tar]);
             }
-            a = ne[a];
         }
-    }
-    void add(int a, int b){
-        e[idx] = b;
-        ne[idx] = h[a];
-        h[a] = idx++;
-    }
-    void dfs(TreeNode* root){
-        if(!root) return;
-        if(root->left){
-            add(root->val, root->left->val);
-            add(root->left->val, root->val);
-            dfs(root->left);
-        }
-        if(root->right){
-            add(root->val, root->right->val);
-            add(root->right->val, root->val);
-            dfs(root->right);
-        }
+        return ans;
     }
 };
 
@@ -147,6 +123,6 @@ int main() {
                                 {"Carla","5","Ceviche"},
                                 {"Rous","3","Ceviche"} };
     Solution so;
-    so.distanceK(r0, r1, 2);
+    so.longestAwesome("00");
     return 0;
 }
