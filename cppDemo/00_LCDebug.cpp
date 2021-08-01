@@ -50,21 +50,20 @@ const int N = 6;
 int h[N], e[N], ne[N], sa[N], idx;
 class Solution {
 public:
-    int longestAwesome(string s) {
-        int n = s.size();
-        unordered_map<int, int> m;
-        m[-1] = 0;
-        int state = 0, ans = 0;
-        for(int i = 0; i < n; ++i){
-            int f = (1 << (s[i] - '0'));
-            state ^= f;
-            if(m.find(state) != m.end()) ans = max(ans, i - m[state]);
-            else m[state] = i;
-            for(int k = 0; k < 10; ++k){
-                int tar = state ^ (1 << k);
-                if(m.find(tar) != m.end()) ans = max(ans, i - m[tar]);
-            }
+    long long numberOfWeeks(vector<int>& m) {
+        priority_queue<int> q(m.begin(), m.end());
+        LL ans = 0;
+        while(q.size() > 1){
+            int f = q.top();
+            q.pop();
+            int s = q.top();
+            q.pop();
+            int ch = max(f, s);
+            ans += min(f, s) * 2;
+            ch -= min(f, s);
+            if(ch > 0) q.push(ch);
         }
+        if(q.top() > 0) ans += 1;
         return ans;
     }
 };
@@ -110,7 +109,7 @@ int main() {
 
 
     vector<vector<int>> a = {{2,9,10},{3,7,15},{5,12,12},{15,20,10},{19,24,8}};
-    vector<int> b = { 16,7,20,11,15,13,10,14,6,8 };
+    vector<int> b = { 4,5,5,2 };
     vector<int> b_ = { 11,14,15,7,5,5,6,10,11,6 };
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
@@ -123,6 +122,6 @@ int main() {
                                 {"Carla","5","Ceviche"},
                                 {"Rous","3","Ceviche"} };
     Solution so;
-    so.longestAwesome("00");
+    so.numberOfWeeks(b);
     return 0;
 }
