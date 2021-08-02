@@ -46,25 +46,46 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
     return p1.second > p2.second;
 }
 
+typedef pair<int, int> PII;
 const int N = 6;
-int h[N], e[N], ne[N], sa[N], idx;
+const int M = 6;
+int h[N], e[M], ne[M], st[N], dist[N], w[M], idx;
 class Solution {
 public:
-    long long numberOfWeeks(vector<int>& m) {
-        priority_queue<int> q(m.begin(), m.end());
-        LL ans = 0;
-        while(q.size() > 1){
-            int f = q.top();
-            q.pop();
-            int s = q.top();
-            q.pop();
-            int ch = max(f, s);
-            ans += min(f, s) * 2;
-            ch -= min(f, s);
-            if(ch > 0) q.push(ch);
+    int networkDelayTime(vector<vector<int>>& times, int n, int k) {
+        idx = 0;
+        memset(h, -1, sizeof(h));
+        memset(dist, 0x3f, sizeof(dist));
+        int m = times.size();
+        priority_queue<PII, vector<PII>, greater<PII>> q;
+        q.push({ 0, k });
+        dist[k] = 0;
+        for(int i = 0; i < m; ++i){
+            int a = times[i][0], b = times[i][1], v = times[i][2];
+            e[idx] = b;
+            ne[idx] = h[a];
+            w[idx] = v;
+            h[a] = idx++;
         }
-        if(q.top() > 0) ans += 1;
-        return ans;
+        while(!q.empty()){
+            auto p = q.top();
+            q.pop();
+            int node = p.second, d = p.first;
+            if(st[node]) continue;
+            st[node] = 1;
+
+            for(int i = h[node]; i != -1; i = ne[i]){
+                int j = e[i];
+                if(dist[j] > dist[node] + w[i]){
+                    dist[j] = dist[node] + w[i];
+                    q.push({ dist[j], j });
+                }
+            }
+        }
+        int ans = 0;
+        for(int i = 1; i <= n; ++i) ans = max(ans, dist[i]);
+        if(ans < 0x3f3f3f3f) return ans;
+        return -1;
     }
 };
 
@@ -108,8 +129,9 @@ int main() {
                                       {"1", "0", "0", "1", "0"} };
 
 
-    vector<vector<int>> a = {{2,9,10},{3,7,15},{5,12,12},{15,20,10},{19,24,8}};
+    vector<vector<int>> a = {{1,2,1}};
     vector<int> b = { 4,5,5,2 };
+    vector<char> vc = { 'A', 'A', 'A', 'B', 'B', 'B' };
     vector<int> b_ = { 11,14,15,7,5,5,6,10,11,6 };
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
@@ -122,6 +144,6 @@ int main() {
                                 {"Carla","5","Ceviche"},
                                 {"Rous","3","Ceviche"} };
     Solution so;
-    so.numberOfWeeks(b);
+    so.networkDelayTime(a, 2, 1);
     return 0;
 }

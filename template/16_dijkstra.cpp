@@ -56,6 +56,9 @@ void add(int a, int b, int v){
 void dijkstra(){
     for(int i = 1; i <= n; ++i) dist[i] = INT_MAX;
     dist[1] = 0;
+    memset(h, -1, sizeof(h));
+    memset(st, 0, sizeof(st));
+    memset(dist, 0x3f, sizeof(dist));
     
     priority_queue<PII, vector<PII>, greater<PII>> q;
     
