@@ -52,40 +52,26 @@ const int M = 6;
 int h[N], e[M], ne[M], st[N], dist[N], w[M], idx;
 class Solution {
 public:
-    int networkDelayTime(vector<vector<int>>& times, int n, int k) {
-        idx = 0;
-        memset(h, -1, sizeof(h));
-        memset(dist, 0x3f, sizeof(dist));
-        int m = times.size();
-        priority_queue<PII, vector<PII>, greater<PII>> q;
-        q.push({ 0, k });
-        dist[k] = 0;
-        for(int i = 0; i < m; ++i){
-            int a = times[i][0], b = times[i][1], v = times[i][2];
-            e[idx] = b;
-            ne[idx] = h[a];
-            w[idx] = v;
-            h[a] = idx++;
+        vector<int> eventualSafeNodes(vector<vector<int>>& g) {
+        int n = g.size();
+        vector<int> cnt(0, n);
+        queue<int> q;
+        for(int i = 0; i < n; ++i){
+            q.push(i);
         }
         while(!q.empty()){
-            auto p = q.top();
+            int i = q.front();
             q.pop();
-            int node = p.second, d = p.first;
-            if(st[node]) continue;
-            st[node] = 1;
-
-            for(int i = h[node]; i != -1; i = ne[i]){
-                int j = e[i];
-                if(dist[j] > dist[node] + w[i]){
-                    dist[j] = dist[node] + w[i];
-                    q.push({ dist[j], j });
-                }
+            for(int j = 0; j < g[i].size(); ++j){
+                ++cnt[g[i][j]];
+                if(cnt[g[i][j]] < n) q.push(g[i][j]);
             }
         }
-        int ans = 0;
-        for(int i = 1; i <= n; ++i) ans = max(ans, dist[i]);
-        if(ans < 0x3f3f3f3f) return ans;
-        return -1;
+        vector<int> res;
+        for(int i = 0; i < n; ++i){
+            if(cnt[i] < n) res.push_back(i);
+        }
+        return res;
     }
 };
 
@@ -129,8 +115,8 @@ int main() {
                                       {"1", "0", "0", "1", "0"} };
 
 
-    vector<vector<int>> a = {{1,2,1}};
-    vector<int> b = { 4,5,5,2 };
+    vector<vector<int>> a = {{1,2},{2,3},{5},{0},{},{}};
+    vector<int> b = { 2,2,3,4 };
     vector<char> vc = { 'A', 'A', 'A', 'B', 'B', 'B' };
     vector<int> b_ = { 11,14,15,7,5,5,6,10,11,6 };
 
@@ -144,6 +130,6 @@ int main() {
                                 {"Carla","5","Ceviche"},
                                 {"Rous","3","Ceviche"} };
     Solution so;
-    so.networkDelayTime(a, 2, 1);
+    so.eventualSafeNodes(a);
     return 0;
 }

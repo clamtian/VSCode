@@ -7,13 +7,20 @@
 
 using namespace std;
 
+
+/*
+给定一个 n 个点 m 条边的无向图，图中可能存在重边和自环，边权可能为负数。
+
+求最小生成树的树边权重之和，如果最小生成树不存在则输出 impossible。
+
+*/
 const int N = 100010;
 vector<vector<int>> edges;
 int p[N];
 int n, m;
 
 int find(int x){
-    if(x != p[x]) p[x] = find(x);
+    if(x != p[x]) p[x] = find(p[x]);
     return p[x];
 }
 
