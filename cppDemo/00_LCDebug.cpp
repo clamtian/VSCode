@@ -47,34 +47,22 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 }
 
 typedef pair<int, int> PII;
-const int N = 6;
+const int N = 40;
 const int M = 6;
 int h[N], e[M], ne[M], st[N], dist[N], w[M], idx;
+
+int ans[N];
 class Solution {
 public:
-        vector<int> eventualSafeNodes(vector<vector<int>>& g) {
-        int n = g.size();
-        vector<int> cnt(0, n);
-        queue<int> q;
-        for(int i = 0; i < n; ++i){
-            q.push(i);
+    int tribonacci(int n) {
+        if(ans[1]) return ans[n];
+        ans[1] = ans[2] = 1;
+        for(int i = 3; i < N; ++i){
+            ans[i] = ans[i - 1] + ans[i - 2] + ans[i - 3];
         }
-        while(!q.empty()){
-            int i = q.front();
-            q.pop();
-            for(int j = 0; j < g[i].size(); ++j){
-                ++cnt[g[i][j]];
-                if(cnt[g[i][j]] < n) q.push(g[i][j]);
-            }
-        }
-        vector<int> res;
-        for(int i = 0; i < n; ++i){
-            if(cnt[i] < n) res.push_back(i);
-        }
-        return res;
+        return ans[n];
     }
 };
-
 
 int main() {
 
@@ -130,6 +118,6 @@ int main() {
                                 {"Carla","5","Ceviche"},
                                 {"Rous","3","Ceviche"} };
     Solution so;
-    so.eventualSafeNodes(a);
+    so.tribonacci(6);
     return 0;
 }
