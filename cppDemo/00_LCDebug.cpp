@@ -54,13 +54,34 @@ int h[N], e[M], ne[M], st[N], dist[N], w[M], idx;
 int ans[N];
 class Solution {
 public:
-    int tribonacci(int n) {
-        if(ans[1]) return ans[n];
-        ans[1] = ans[2] = 1;
-        for(int i = 3; i < N; ++i){
-            ans[i] = ans[i - 1] + ans[i - 2] + ans[i - 3];
+    int findCheapestPrice(int n, vector<vector<int>>& flights, int src, int dst, int k) {
+        vector<int> dist(n, INT_MAX / 2), back(n, INT_MAX / 2), st(n, 0);
+        dist[src] = 0;
+        st[src] = 1;
+        vector<vector<PII>> g(n);
+        for(auto f : flights) g[f[0]].push_back({ f[1], f[2] });
+        queue<int> q;
+        q.push(0);
+        while(!q.empty() && k-- >= 0){
+            queue<int> q1;
+            back = dist;
+            while(!q.empty()){
+                int a = q.front();
+                q.pop();
+                st[a] = 0;
+                for(auto [b, w] : g[a]){
+                    if(dist[b] > back[a] + w){
+                        dist[b] = back[a] + w;
+                        if(!st[b]){
+                            q1.push(b);
+                            st[b] = 1;
+                        }
+                    }
+                }
+            }
+            q = q1;
         }
-        return ans[n];
+        return dist[dst] == INT_MAX / 2 ? -1 : dist[dst];
     }
 };
 
@@ -103,7 +124,7 @@ int main() {
                                       {"1", "0", "0", "1", "0"} };
 
 
-    vector<vector<int>> a = {{1,2},{2,3},{5},{0},{},{}};
+    vector<vector<int>> a = {{0,1,1},{0,2,5},{1,2,1},{2,3,1}};
     vector<int> b = { 2,2,3,4 };
     vector<char> vc = { 'A', 'A', 'A', 'B', 'B', 'B' };
     vector<int> b_ = { 11,14,15,7,5,5,6,10,11,6 };
@@ -118,6 +139,6 @@ int main() {
                                 {"Carla","5","Ceviche"},
                                 {"Rous","3","Ceviche"} };
     Solution so;
-    so.tribonacci(6);
+    so.findCheapestPrice(4, a, 0 , 3, 1);
     return 0;
 }
