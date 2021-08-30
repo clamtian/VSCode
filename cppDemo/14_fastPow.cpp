@@ -18,16 +18,19 @@ using namespace std;
 
 int MOD = 1e9 + 7;
 //快速幂
-class Solution {
-public:
-    int fastPow(int base, int pow){
-        int res = 1;
-        while(pow){
-            if(pow & 1) res = res * base % MOD;
-            base = base * base % MOD;
-            pow >>= 1;
-            
-        }
-        return res;
+int fastPow(long long base, long long pow){
+    int res = 1;
+    while(pow){
+        if(pow & 1) res = res * base % MOD;
+        base = base * base % MOD;
+        pow >>= 1;
+        cout << res << endl;
     }
-};
+    
+    return res;
+}
+
+int main(){
+    cout << fastPow(2, 44) << endl;
+    return 0;
+}
