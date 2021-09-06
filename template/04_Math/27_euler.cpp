@@ -6,6 +6,7 @@ using namespace std;
 
 // 求欧拉函数
 
+
 int phi(int x){
     if(x < 2) return x;
     int res = x;
