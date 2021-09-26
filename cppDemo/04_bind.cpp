@@ -29,6 +29,7 @@ int main()
     cout << "There are " << cx << " elements that are not less than 40.\n";
 
 
+
     system("pause");
     return 0;
 }
