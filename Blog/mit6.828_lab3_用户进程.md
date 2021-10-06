@@ -1,5 +1,45 @@
 
-# 1.回顾内存布局
+# 1.函数回顾
+
+在lab1和lab2中，我们实现了很多函数，在进行lab3之前，我们先对这些函数进行一下总结。
+
+```JavaScript
+宏
+KERNBASE 0xF0000000 //被映射的基准地址，即物理地址+KERNBASE=虚拟地址
+KADDR(pa)           //宏函数，将物理地址pa转换为虚拟地址，即pa+KERNBASE
+PADDR(kva)          //宏函数，将虚拟地址kva转换为物理地址，即kva-KERNBASE
+PTE_ADDR(pte)       //取出page table entry或者page directory entry中的地址
+
+函数
+//将pp转换为物理地址
+static inline phtsaddr_t page2pa(struct PageInfo *pp)
+//将pp转换为虚拟地址
+static inline phtsaddr_t page2kva(struct PageInfo *pp)
+//将物理地址pa转换为页指针
+static inline struct PageInfo* pa2page(physaddr_t pa)
+//初始的内存分配器，返回n字节的虚拟内存地址，不初始化内存；n为0时，返回下一可用页的地址
+static void *boot_alloc(uint32_t n)   
+//正式的页分配器，分配一页的内存，如果(alloc_flags & ALLOC_ZERO)，则初始化分配的空间
+struct PageInfo *page_alloc(int alloc_flags)
+//释放pp指向的页
+void page_free(struct PageInfo *pp)
+//给定虚拟地址va和page directory pgdir，返回虚拟地址在这个pgdir下的page table entry
+//若page table不存在且create == true，则新建page table
+pte_t *pgdir_walk(pde_t *pgdir, const void *va, int create)
+//将虚拟地址[va, va + size] 映射至物理地址[pa, pa + size]上，pgdir为使用的page directory
+static void boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
+//返回虚拟地址va所对应的页指针
+//若pte_store不为0，将va对应的page table entry储存至其中
+struct PageInfo *page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
+//删除虚拟地址va的映射
+void page_remove(pde_t *pgdir, void *va)
+//将虚拟地址va映射至物理页地址pp
+int page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
+```
+
+
+
+
 
 完成part1后，我们的内存使用情况如下：
 
@@ -7,47 +47,7 @@
 
 我们接着看`mem_init`函数，part1我们已经分析到了`check_page`函数。接下来执行到了`check_kern_pgdir`函数：
 
-```JavaScript
-void
-mem_init(void)
-{
-	uint32_t cr0;
-	size_t n;
 
-	// Find out how much memory the machine has (npages & npages_basemem).
-	i386_detect_memory();
-
-	kern_pgdir = (pde_t *) boot_alloc(PGSIZE);
-	memset(kern_pgdir, 0, PGSIZE);
-
-	kern_pgdir[PDX(UVPT)] = PADDR(kern_pgdir) | PTE_U | PTE_P;
-
-	pages = (struct PageInfo *)boot_alloc(npages * sizeof(struct PageInfo));
-	memset(pages, 0, npages * sizeof(struct PageInfo));
-
-	page_init();
-
-	check_page_free_list(1);
-	check_page_alloc();
-	check_page();
-
-	check_kern_pgdir();
-
-
-	lcr3(PADDR(kern_pgdir));
-
-	check_page_free_list(0);
-
-
-	cr0 = rcr0();
-	cr0 |= CR0_PE|CR0_PG|CR0_AM|CR0_WP|CR0_NE|CR0_MP;
-	cr0 &= ~(CR0_TS|CR0_EM);
-	lcr0(cr0);
-
-	check_page_installed_pgdir();
-}
-
-```
 
 # 2.内存分配
 
