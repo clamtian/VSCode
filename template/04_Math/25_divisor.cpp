@@ -14,7 +14,6 @@ vector<int> getDivisors(int x){
             if(x / i != i) res.push_back(x / i);
         }
     }
-    pow(1, 2);
     sort(res.begin(), res.end());
     return res;
 }
