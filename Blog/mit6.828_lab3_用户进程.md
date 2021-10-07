@@ -18,19 +18,19 @@ static inline phtsaddr_t page2kva(struct PageInfo *pp)
 //将物理地址pa转换为页指针
 static inline struct PageInfo* pa2page(physaddr_t pa)
 //初始的内存分配器，返回n字节的虚拟内存地址，不初始化内存；n为0时，返回下一可用页的地址
-static void *boot_alloc(uint32_t n)   
+static void* boot_alloc(uint32_t n)   
 //正式的页分配器，分配一页的内存，如果(alloc_flags & ALLOC_ZERO)，则初始化分配的空间
-struct PageInfo *page_alloc(int alloc_flags)
+struct PageInfo* page_alloc(int alloc_flags)
 //释放pp指向的页
 void page_free(struct PageInfo *pp)
 //给定虚拟地址va和page directory pgdir，返回虚拟地址在这个pgdir下的page table entry
 //若page table不存在且create == true，则新建page table
-pte_t *pgdir_walk(pde_t *pgdir, const void *va, int create)
+pte_t* pgdir_walk(pde_t *pgdir, const void *va, int create)
 //将虚拟地址[va, va + size] 映射至物理地址[pa, pa + size]上，pgdir为使用的page directory
 static void boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 //返回虚拟地址va所对应的页指针
 //若pte_store不为0，将va对应的page table entry储存至其中
-struct PageInfo *page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
+struct PageInfo* page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 //删除虚拟地址va的映射
 void page_remove(pde_t *pgdir, void *va)
 //将虚拟地址va映射至物理页地址pp
