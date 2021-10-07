@@ -9,6 +9,7 @@ KERNBASE 0xF0000000 //被映射的基准地址，即物理地址+KERNBASE=虚拟
 KADDR(pa)           //宏函数，将物理地址pa转换为虚拟地址，即pa+KERNBASE
 PADDR(kva)          //宏函数，将虚拟地址kva转换为物理地址，即kva-KERNBASE
 PTE_ADDR(pte)       //取出page table entry或者page directory entry中的地址
+PDX(la)             //取出虚拟地址la中包含的page directory index
 
 函数
 //将pp转换为物理地址
