@@ -42,6 +42,8 @@ int page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 
 
 
+
+
 完成part1后，我们的内存使用情况如下：
 
 ![avatar](./image/lab2内存使用情况3.png)
