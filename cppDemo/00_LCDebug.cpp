@@ -47,47 +47,43 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 }
 
 typedef pair<int, int> PII;
-const int N = 40;
-const int M = 6;
-int h[N], e[M], ne[M], st[N], dist[N], w[M], idx;
-
-int ans[N];
 class Solution {
 public:
-    int findCheapestPrice(int n, vector<vector<int>>& flights, int src, int dst, int k) {
-        vector<int> dist(n, INT_MAX / 2), back(n, INT_MAX / 2), st(n, 0);
-        dist[src] = 0;
-        st[src] = 1;
-        vector<vector<PII>> g(n);
-        for(auto f : flights) g[f[0]].push_back({ f[1], f[2] });
-        queue<int> q;
-        q.push(0);
-        while(!q.empty() && k-- >= 0){
-            queue<int> q1;
-            back = dist;
-            while(!q.empty()){
-                int a = q.front();
-                q.pop();
-                st[a] = 0;
-                for(auto [b, w] : g[a]){
-                    if(dist[b] > back[a] + w){
-                        dist[b] = back[a] + w;
-                        if(!st[b]){
-                            q1.push(b);
-                            st[b] = 1;
-                        }
-                    }
-                }
-            }
-            q = q1;
-        }
-        return dist[dst] == INT_MAX / 2 ? -1 : dist[dst];
-    }
+    
 };
+
+const int N = 25;
+int son[N][26], cnt[N], idx = 0;
+    void addWord(string word) {
+        int p = 0, n = word.size();
+        for(int i = 0; i < n; ++i){
+            int u = word[i] - 'a';
+            if(!son[p][u]) son[p][u] = ++idx;
+            p = son[p][u];
+        }
+        cnt[p++];
+    }
+    
+    bool dfs(string& word, int p, int u){
+        if(u == word.size()) return true;
+        if(word[u] == '.'){
+            for(int i = 0; i < 26; ++i){
+                if(son[p][i] && dfs(word, son[p][i], u + 1))
+                    return true;
+            }
+            return false;
+        }
+        if(!son[p][word[u] - 'a']) return false;
+        return dfs(word, son[p][word[u] - 'a'], u + 1);
+    }
+    bool search(string word) {
+        return dfs(word, 0, 0);
+    }
 
 int main() {
 
     
+    cout << search("bad") << endl;
     ListNode x1(5);
     ListNode x2(2);
     ListNode x3(3);
@@ -139,6 +135,5 @@ int main() {
                                 {"Carla","5","Ceviche"},
                                 {"Rous","3","Ceviche"} };
     Solution so;
-    so.findCheapestPrice(4, a, 0 , 3, 1);
     return 0;
 }
