@@ -1,3 +1,50 @@
+# 0.前言
+在将lab2的代码merge到lab3的时候，发生了一点小插曲，导致lab2完成的代码在lab3中失效了，所幸最后解决了这个bug，所以这里专门开一个小节用来记录一下。
+在应用git命令
+```JavaScript
+git merge lab2
+```
+合并分支之后，在之前lab2中完成的代码便被合并到了lab3中，但我在进行测试时，发现lab2的测试无法通过，会报以下错误：
+```JavaScript
+6828 decimal is 15254 octal!
+Physical memory: 131072K available, base = 640K, extended = 130432K
+end = :f0190000
+kernel panic at kern/pmap.c:164: PADDR called with invalid kva 00000000
+Welcome to the JOS kernel monitor!
+Type 'help' for a list of commands.
+```
+
+重点是`kernel panic at kern/pmap.c:164: PADDR called with invalid kva 00000000`这一句，这句话的意思是说宏函数`PADDR`中传入的是一个零值，它对应于`pmap.c`中给`kern_pgdir`赋值的那行代码(下面第三行)：
+```JavaScript
+kern_pgdir = (pde_t *) boot_alloc(PGSIZE);
+memset(kern_pgdir, 0, PGSIZE);
+kern_pgdir[PDX(UVPT)] = PADDR(kern_pgdir) | PTE_U | PTE_P;
+```
+从上面的代码中可以看到，`PADDR`中传入的是页目录表指针`kern_pgdir`，我们通过`boot_alloc`给这个指针分配了一个页的空间，但是为何这个指针值为0，我们将指针值和地址打印出来：
+```JavaScript
+kern_pgdir = (pde_t *) boot_alloc(PGSIZE);
+cprintf("kern_pgdir = %x\n", kern_pgdir);
+cprintf("kern_pgdir address = %x\n", &kern_pgdir);
+memset(kern_pgdir, 0, PGSIZE);
+kern_pgdir[PDX(UVPT)] = PADDR(kern_pgdir) | PTE_U | PTE_P;
+
+********************************************output***********************************
+
+kern_pgdir = f0190000
+kern_pgdir address = f019000c
+```
+可以看到，`kern_pgdir`自己的地址在指向地址的高位，所以后面再用`memset`初始化空间时便将`kern_pgdir`的值也一并初始化了。所以在`boot_alloc`中将初始输出值往高位拉个偏移，使`kern_pgdir`自己的地址在指向地址的低位，这样问题便能解决。
+
+```JavaScript
+kern_pgdir = f0191000
+kern_pgdir address = f019000c
+```
+
+问题是解决了，可引发了一个问题，`boot_alloc`初始的输出值应该是kernel代码所占空间的后面(下图)，而`kern_pgdir`是在kernel代码中定义的，所以它的地址不应该超出kernel代码空间的范围。按照上面的输出结果来看，kernel代码空间应该是在地址0xf0190000处终止，而`kern_pgdir`的地址是在
+0xf019000c处，这显然超过了0xf0190000。内核中定义的指针竟然超出了内核空间！这显然是不可思议的，但是本人目前的知识储备不足以支持我解决这个疑惑，所以暂记在此处，待日后再来填这个坑。
+![avatar](./image/lab1内存使用情况.png)
+
+
 # 1.函数回顾
 
 在lab1和lab2中，我们实现了很多函数，在进行lab3之前，我们先对这些函数进行一下总结。
