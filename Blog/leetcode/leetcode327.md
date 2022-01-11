@@ -56,6 +56,10 @@ public:
         return cnt;
     }
 };
-
 ```
 
+解法2：线段树
+```JavaScript
+
+
+```
