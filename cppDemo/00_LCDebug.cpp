@@ -49,7 +49,33 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 typedef pair<int, int> PII;
 class Solution {
 public:
-    
+        bool possibleToStamp(vector<vector<int>>& grid, int h, int w) {
+        int m = grid.size(), n = grid[0].size();
+        vector<vector<int>> Sum(m + 1, vector<int>(n + 1, 0));
+        for(int i = 0; i < m; ++i){
+            for(int j = 0; j < n; ++j){
+                Sum[i + 1][j + 1] = grid[i][j] + Sum[i][j + 1] + Sum[i + 1][j] - Sum[i][j];
+            }
+        }
+        vector<vector<PII>> g(m + 1, vector<PII>(n + 1));
+        for(int i = m; i > 0; --i){
+            for(int j = n; j > 0; --j){
+                //cout << i << "  " << j << endl;
+                if(i >= h && j >= w && Sum[i][j] + Sum[i - h][j - w] - Sum[i - h][j] - Sum[i][j - w] == 0){
+                    g[i][j].first = h, g[i][j].second = w;
+                }else if(grid[i - 1][j - 1] != 1){
+                    //cout << i << " " << j << endl;
+                    if(i < m && grid[i][j - 1] != 1) 
+                        g[i][j].first = g[i + 1][j].first - 1, g[i][j].second = g[i + 1][j].second - 1;
+                    if(j < n && grid[i - 1][j] != 1) 
+                        g[i][j].first = max(g[i][j].first, g[i][j + 1].first - 1), g[i][j].second = max(g[i][j].second, g[i][j + 1].second - 1);
+                    //cout << g[i][j].first << " " << g[i][j].second << endl;
+                    if(g[i][j].first == -1 || g[i][j].second == -1) return false;
+                }
+            }
+        }
+        return true;
+    }
 };
 
 const int N = 25;
@@ -120,7 +146,7 @@ int main() {
                                       {"1", "0", "0", "1", "0"} };
 
 
-    vector<vector<int>> a = {{0,1,1},{0,2,5},{1,2,1},{2,3,1}};
+    vector<vector<int>> a = {{1,0,0,0},{1,0,0,0}, { 1,0,0,0}, {1,0,0,0}};
     vector<int> b = { 2,2,3,4 };
     vector<char> vc = { 'A', 'A', 'A', 'B', 'B', 'B' };
     vector<int> b_ = { 11,14,15,7,5,5,6,10,11,6 };
@@ -135,5 +161,6 @@ int main() {
                                 {"Carla","5","Ceviche"},
                                 {"Rous","3","Ceviche"} };
     Solution so;
+    so.possibleToStamp(a, 4, 3);
     return 0;
 }
