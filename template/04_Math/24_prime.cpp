@@ -13,8 +13,6 @@ bool is_prime(int x){
     return true;
 }
 
-
-
 // 试除法求质因数
 // 给定 n 个正整数 ai，将每个数分解质因数，并按照质因数从小到大的顺序输出每个质因数的底数和指数。
 void divide(int x){
@@ -27,7 +25,6 @@ void divide(int x){
     }
     if(x > 1) cout << x << " " << 1 << endl;  //x是质数时判定生效
 }
-
 
 // 朴素筛法求素数  O(nlogn)
 
@@ -44,7 +41,6 @@ void get_primes(int n){
     }
 }
 
-
 // 线性筛法求素数 O(n)
 
 int primes[N], cnt;     // primes[]存储所有素数
@@ -59,11 +55,6 @@ void get_primes(int n){
         }
     }
 }
-
-
-
-
-
 
 int main(){
     return 0;

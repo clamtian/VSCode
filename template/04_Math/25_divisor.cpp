@@ -18,7 +18,6 @@ vector<int> getDivisors(int x){
     return res;
 }
 
-
 /*
 如果 N = p1^c1 * p2^c2 * ... *pk^ck
 约数个数： (c1 + 1) * (c2 + 1) * ... * (ck + 1)
@@ -37,7 +36,6 @@ void divide(int x){
     }
     if(x > 1) ++umap[x];
 }
-
 
 // 给定 n 个正整数 ai，请你输出这些数的乘积的约数之和，答案对 10^9+7 取模。
 

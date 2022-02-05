@@ -33,8 +33,6 @@ int dijkstra(){
     return dist[n];
 }
 
-
-
 //***********************************************************************
 //堆优化dijkstra O(mlogn)
 
@@ -51,7 +49,6 @@ void add(int a, int b, int v){
     ne[idx] = h[a];
     h[a] = idx++;
 }
-
 
 void dijkstra(){
     for(int i = 1; i <= n; ++i) dist[i] = INT_MAX;
@@ -82,11 +79,7 @@ void dijkstra(){
     }
 }
 
-
-
-
 int main(){
-    
-    
+     
     return 0;
 }

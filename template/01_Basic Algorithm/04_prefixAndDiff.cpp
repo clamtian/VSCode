@@ -19,8 +19,6 @@ using namespace std;
 /*
 * 重点是下标与位置(第几个)的关系
 */
-
-
 void prefix(vector<vector<int>>& A){
     int m = A.size(), n = A[0].size();
     vector<vector<int>> B(m + 1, vector<int>(n + 1, 0));  //B[i][j] 表示前i行j列的和
@@ -39,7 +37,7 @@ void diff(vector<int>& B){
         A[i] = B[i + 1] - B[i];
     }
 }
-
+// 二维数组差分
 void diff(vector<vector<int>>& B){
     int m = B.size(), n = B[0].size();
     vector<vector<int>> A(m, vector<int>(n, 0));
@@ -51,7 +49,6 @@ void diff(vector<vector<int>>& B){
 }
 
 int main(){
-    
-    
+
     return 1;
 }

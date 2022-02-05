@@ -45,8 +45,6 @@ void monQueue(vector<int>& nums, int k){
         if(i >= k - 1) printf("%d ", nums[q1.front()]);
         
     }
-
-
     printf("\n");
 
     //输出窗口中最大值  维护递减队列

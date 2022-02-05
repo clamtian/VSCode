@@ -49,12 +49,6 @@ int pop(){
     return res;
 }
 
-
-
-
-
-
-
 int main(){
     return 1;
 }
