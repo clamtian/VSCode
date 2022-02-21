@@ -47,69 +47,42 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 }
 
 typedef pair<int, int> PII;
+#define lowbit(x) ((x) & (-x))
 class Solution {
 public:
-        bool possibleToStamp(vector<vector<int>>& grid, int h, int w) {
-        int m = grid.size(), n = grid[0].size();
-        vector<vector<int>> Sum(m + 1, vector<int>(n + 1, 0));
-        for(int i = 0; i < m; ++i){
-            for(int j = 0; j < n; ++j){
-                Sum[i + 1][j + 1] = grid[i][j] + Sum[i][j + 1] + Sum[i + 1][j] - Sum[i][j];
-            }
+    long long goodTriplets(vector<int>& nums1, vector<int>& nums2) {
+        int n = nums1.size();
+        unordered_map<int, int> umap;
+        for(int i = 0; i < n; ++i) umap[nums2[i]] = i;
+        for(int i = 0; i < n; ++i){
+            nums2[umap[nums1[i]]] = i;
+                  nums1[i] = i;
         }
-        vector<vector<PII>> g(m + 1, vector<PII>(n + 1));
-        for(int i = m; i > 0; --i){
-            for(int j = n; j > 0; --j){
-                //cout << i << "  " << j << endl;
-                if(i >= h && j >= w && Sum[i][j] + Sum[i - h][j - w] - Sum[i - h][j] - Sum[i][j - w] == 0){
-                    g[i][j].first = h, g[i][j].second = w;
-                }else if(grid[i - 1][j - 1] != 1){
-                    //cout << i << " " << j << endl;
-                    if(i < m && grid[i][j - 1] != 1) 
-                        g[i][j].first = g[i + 1][j].first - 1, g[i][j].second = g[i + 1][j].second - 1;
-                    if(j < n && grid[i - 1][j] != 1) 
-                        g[i][j].first = max(g[i][j].first, g[i][j + 1].first - 1), g[i][j].second = max(g[i][j].second, g[i][j + 1].second - 1);
-                    //cout << g[i][j].first << " " << g[i][j].second << endl;
-                    if(g[i][j].first == -1 || g[i][j].second == -1) return false;
-                }
-            }
+        long long ans = 0;
+        vector<long long> tree(n + 1, 0);
+        for(int i = 0; i < n; ++i){
+            long long x = query(nums2[i] + 1, tree);
+            ans += x * (n - i - 1 - i + x);
+            update(nums2[i] + 1, 1, tree);
         }
-        return true;
+        return ans;
+    }
+    void update(int i, int x, vector<long long>& tree){
+        for (int pos = i; pos < tree.size(); pos += lowbit(pos))
+            tree[pos] += x;
+    }
+    int query(int n, vector<long long>& tree){
+        int ans = 0;
+        for (int pos = n; pos; pos -= lowbit(pos))
+            ans += tree[pos];
+        return ans;
     }
 };
-
-const int N = 25;
-int son[N][26], cnt[N], idx = 0;
-    void addWord(string word) {
-        int p = 0, n = word.size();
-        for(int i = 0; i < n; ++i){
-            int u = word[i] - 'a';
-            if(!son[p][u]) son[p][u] = ++idx;
-            p = son[p][u];
-        }
-        cnt[p++];
-    }
-    
-    bool dfs(string& word, int p, int u){
-        if(u == word.size()) return true;
-        if(word[u] == '.'){
-            for(int i = 0; i < 26; ++i){
-                if(son[p][i] && dfs(word, son[p][i], u + 1))
-                    return true;
-            }
-            return false;
-        }
-        if(!son[p][word[u] - 'a']) return false;
-        return dfs(word, son[p][word[u] - 'a'], u + 1);
-    }
-    bool search(string word) {
-        return dfs(word, 0, 0);
-    }
 
 int main() {
 
     
-    cout << search("bad") << endl;
+    ///cout << search("bad") << endl;
     ListNode x1(5);
     ListNode x2(2);
     ListNode x3(3);
@@ -147,9 +120,9 @@ int main() {
 
 
     vector<vector<int>> a = {{1,0,0,0},{1,0,0,0}, { 1,0,0,0}, {1,0,0,0}};
-    vector<int> b = { 2,2,3,4 };
+    vector<int> b = { 2,0,1,3 };
     vector<char> vc = { 'A', 'A', 'A', 'B', 'B', 'B' };
-    vector<int> b_ = { 11,14,15,7,5,5,6,10,11,6 };
+    vector<int> b_ = { 0,1,2,3 };
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
                                {'0', '1', '0'},
@@ -161,6 +134,6 @@ int main() {
                                 {"Carla","5","Ceviche"},
                                 {"Rous","3","Ceviche"} };
     Solution so;
-    so.possibleToStamp(a, 4, 3);
+    so.goodTriplets(b, b_);
     return 0;
 }
