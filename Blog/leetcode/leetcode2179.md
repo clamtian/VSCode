@@ -6,25 +6,54 @@
 
 请你返回好三元组的总数目。
 
-### 示例 1：
+## 示例 1：
     输入：nums1 = [2,0,1,3], nums2 = [0,1,2,3]
     输出：1
     解释：
     总共有 4 个三元组 (x,y,z) 满足 pos1x < pos1y < pos1z ，分别是 (2,0,1) ，(2,0,3) ，(2,1,3) 和 (0,1,3) 。
     这些三元组中，只有 (0,1,3) 满足 pos2x < pos2y < pos2z 。所以只有 1 个好三元组。
 
-### 解法1:使用归并排序的思想。
+## 解法1:使用归并排序的思想。
 
 ```Javascript
 
 ```
 
-### 解法2：线段树
+## 解法2：线段树
 
-#### 提示1：
+### 提示1
+一个直观的解法就是遍历nums1中元素y，并且记录出现过的元素，在nums2中寻找相应的y，统计nums2中pos2y前出现的数字个数，暴力解法为O($n^3$)，需要进行优化。
+一种优化方式是使用哈希表记录nums2中数字的下标，然后在遍历nums1的时候可以直接在nums2中寻找到相应数字的下标，这样的话时间复杂度可以退化到O($n^2$)，在数据量过大的情况下依旧达不到要求。
+现在的问题来到了如何快速查找在pos2y前出现过的数字个数，建立一个长度为n的数组，在遍历过程中，我们可以用0、1来标识相应的数字是否出现过，然后利用树状数组来进行快速修改以及查询前缀和，总的时间复杂度为O($nlogn$)。
+
+```JavaScript
+class Solution {
+public:
+    long long goodTriplets(vector<int>& nums1, vector<int>& nums2) {
+        int n = nums1.size();
+        vector<int> P(n);
+        for(int i = 0; i < n; ++i) P[nums2[i]] = i;
+        vector<int> tree(n + 1);
+        long long ans = 0;
+        for(int i = 0; i < n; ++i){
+            int y = nums1[i];
+            int l = 0;
+            // search how many numbers have been traversed
+            for(int p = P[y] + 1; p; p -= (p & -p))
+                l += tree[p];
+            ans += (long)l * (n - P[y] - 1 - (i - l));
+            // add number y into the BIT
+            for(int p = P[y] + 1; p <= n; p += (p & -p))
+                tree[p] += 1;
+        }
+        return ans;
+    }
+};
+```
+
+### 提示2：
 如果nums1的形式为[0,1,2,...,n-1]的话，问题会简单许多。是不是可以想办法将nums1转换成上面的形式？
 
-#### 解答：
 定义一个转换函数P(x) = pos1x，因为要求的三元组数目只与数字的位置有关，而与具体数字无关，所以将nums2做相应的转换并不影响结果(仔细思考)
 nums1 = [2,0,1,3], nums2 = [0,1,2,3]
 将两者做相应的转换：[0,1,2,3] [1,2,0,3]并不影响好三元组的数量
