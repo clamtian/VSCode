@@ -47,35 +47,47 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 }
 
 typedef pair<int, int> PII;
-#define lowbit(x) ((x) & (-x))
 class Solution {
 public:
+    long long ans = 0;
     long long goodTriplets(vector<int>& nums1, vector<int>& nums2) {
         int n = nums1.size();
-        unordered_map<int, int> umap;
-        for(int i = 0; i < n; ++i) umap[nums2[i]] = i;
-        for(int i = 0; i < n; ++i){
-            nums2[umap[nums1[i]]] = i;
-                  nums1[i] = i;
-        }
-        long long ans = 0;
-        vector<long long> tree(n + 1, 0);
-        for(int i = 0; i < n; ++i){
-            long long x = query(nums2[i] + 1, tree);
-            ans += x * (n - i - 1 - i + x);
-            update(nums2[i] + 1, 1, tree);
-        }
+        vector<int> re(n, 0);
+        vector<int> p(n, 0), be(n, 0);
+        for(int i = 0; i < n; ++i) p[nums1[i]] = i;
+        merge(p, nums2, re, be, 0, n - 1);
         return ans;
     }
-    void update(int i, int x, vector<long long>& tree){
-        for (int pos = i; pos < tree.size(); pos += lowbit(pos))
-            tree[pos] += x;
-    }
-    int query(int n, vector<long long>& tree){
-        int ans = 0;
-        for (int pos = n; pos; pos -= lowbit(pos))
-            ans += tree[pos];
-        return ans;
+    void merge(vector<int>& p, vector<int>& nums2, vector<int>& re, vector<int>& be, int l, int r){
+        if(l >= r) return;
+        int mid = (l + r) >> 1;
+        merge(p, nums2, re, be, mid + 1, r);
+        merge(p, nums2, re, be, l, mid);
+        int i = l, j = mid + 1, k = 0;
+        vector<int> tmp(r - l + 1, 0);
+        while(i <= mid && j <= r){
+            int y = nums2[i], z = nums2[j];
+            if(p[y] < p[z]){
+                ans += (long)(re[z] + 1) * be[y];
+                re[y] += r - j + 1;
+                tmp[k++] = y;
+                ++i;
+            }else{
+                be[z] += i - l;
+                tmp[k++] = z;
+                ++j;
+            }
+        }
+        while(i <= mid) tmp[k++] = nums2[i++];
+        while(j <= r){
+            int y = nums2[j];
+            ans += (long)(mid - l + 1) * re[y];
+            be[y] += mid - l + 1;
+            tmp[k++] = nums2[j++];
+        } 
+        for(int i = l; i <= r; ++i){
+            nums2[i] = tmp[i - l];
+        }
     }
 };
 
@@ -120,9 +132,10 @@ int main() {
 
 
     vector<vector<int>> a = {{1,0,0,0},{1,0,0,0}, { 1,0,0,0}, {1,0,0,0}};
-    vector<int> b = { 2,0,1,3 };
+    vector<int> b = { 2,3,4,0,5,1 };
+    vector<int> b_ = { 5,2,4,3,1,0 };
     vector<char> vc = { 'A', 'A', 'A', 'B', 'B', 'B' };
-    vector<int> b_ = { 0,1,2,3 };
+    
 
     vector<vector<char>> ch_vec = { {'1', '1', '1'},
                                {'0', '1', '0'},
