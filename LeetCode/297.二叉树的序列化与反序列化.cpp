@@ -23,73 +23,84 @@ using namespace std;
      TreeNode(int x) : val(x), left(NULL), right(NULL) {}
  };
  
+/**
+ * Definition for a binary tree node.
+ * struct TreeNode {
+ *     int val;
+ *     TreeNode *left;
+ *     TreeNode *right;
+ *     TreeNode(int x) : val(x), left(NULL), right(NULL) {}
+ * };
+ */
 class Codec {
 public:
 
     // Encodes a tree to a single string.
     string serialize(TreeNode* root) {
-        stack<TreeNode*> s1, s2;
-        string res = "";
-        if(!root) return "null";
-        int flag = 1;
-        s1.push(root);
-        while(!s1.empty() && flag){
-            flag = 0;
-            while(!s1.empty()){
-                auto node = s1.top();
-                s1.pop();
-                if(!node) res += "null,";
-                else{
-                    flag = 1;
-                    res += to_string(node->val) + ",";
-                    s2.push(node->left);
-                    s2.push(node->right);
-                }
+        string res;
+        if(!root) return res;
+        TreeNode* node = root;
+        stack<TreeNode*> s;
+        s.push(node);
+        TreeNode* z = new TreeNode(0);
+        while(s.size()){
+            node = s.top();
+            s.pop();
+            if(node == z) res += "_#";
+            else{
+                res += "#" + to_string(node->val);
+                if(node->right) s.push(node->right);
+                if(node->left) s.push(node->left);
             }
-            swap(s1, s2);
-            s2 = stack<TreeNode*>();
         }
-        res.pop_back();
-        cout << "serialize end" << endl;
         return res;
     }
 
-
     // Decodes your encoded data to tree.
     TreeNode* deserialize(string data) {
-        stack<TreeNode*> s1, s2;
-        if(data == "null") return nullptr;
-        vector<string> vec;
-        int pos = 0, n = data.size();
-        while(pos < n && data.find(',', pos) != string::npos){
-            int pos_ = data.find(',', pos);
-            vec.push_back(data.substr(pos, pos_ - pos));
-            pos = pos_ + 1;
-        }
-        pos = 0, n = vec.size();
-        TreeNode* root = new TreeNode(stoi(vec[pos++]));
-        s1.push(root);
-        while(!s1.empty() && pos < n){
-            while(!s1.empty()){
-                TreeNode* left, * right;
-                if(vec[pos] != "null") left = new TreeNode(stoi(vec[pos++]));
-                if(vec[pos] != "null") right = new TreeNode(stoi(vec[pos++]));
-                TreeNode* node = s1.top();
-                s1.pop();
-                if(node){
-                    node->left = left;
-                    node->right = right;
-                }
-                s2.push(left);
-                s2.push(right);
+        vector<string> v = preProcess(data);
+        int n = v.size();
+        if(!n) return NULL;
+        TreeNode* head = new TreeNode(stoi(v[0]));
+        TreeNode* node = head;
+        stack<TreeNode*> s;
+        s.push(head);
+        int idx = 1;
+        while(idx < n){
+            node = s.top();
+            s.pop();
+            cout << v[idx] << endl;
+            if(v[idx] != "#"){
+                TreeNode* l = new TreeNode(stoi(v[idx]));
+                node->left = l;
+                s.push(l);
+            }else if(idx + 1 < n && v[++idx] != "#"){
+                TreeNode* r = new TreeNode(stoi(v[idx]));
+                node->right = r;
+                s.push(r);
             }
-            swap(s1, s2);
-            s2 = stack<TreeNode*>();
+            ++idx;
         }
-        return root;
+        return head;
+    }
+    vector<string> preProcess(string& s){
+        int n = s.size();
+        int p = 0;
+        vector<string> res;
+        while(p < n){
+            int t = p;
+            while(t < p && s[t] != '_') ++t;
+            string str = s.substr(p, t - p);
+            res.push_back(str);
+            p = t + 1;
+        }
+        return res;
     }
 };
 
+// Your Codec object will be instantiated and called as such:
+// Codec ser, deser;
+// TreeNode* ans = deser.deserialize(ser.serialize(root));
 // Your Codec object will be instantiated and called as such:
 // Codec ser, deser;
 // TreeNode* ans = deser.deserialize(ser.serialize(root));
