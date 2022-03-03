@@ -47,49 +47,84 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 }
 
 typedef pair<int, int> PII;
+/**
+ * Definition for a binary tree node.
+ * struct TreeNode {
+ *     int val;
+ *     TreeNode *left;
+ *     TreeNode *right;
+ *     TreeNode(int x) : val(x), left(NULL), right(NULL) {}
+ * };
+ */
 class Solution {
 public:
-    long long ans = 0;
-    long long goodTriplets(vector<int>& nums1, vector<int>& nums2) {
-        int n = nums1.size();
-        vector<int> re(n, 0);
-        vector<int> p(n, 0), be(n, 0);
-        for(int i = 0; i < n; ++i) p[nums1[i]] = i;
-        merge(p, nums2, re, be, 0, n - 1);
-        return ans;
-    }
-    void merge(vector<int>& p, vector<int>& nums2, vector<int>& re, vector<int>& be, int l, int r){
-        if(l >= r) return;
-        int mid = (l + r) >> 1;
-        merge(p, nums2, re, be, mid + 1, r);
-        merge(p, nums2, re, be, l, mid);
-        int i = l, j = mid + 1, k = 0;
-        vector<int> tmp(r - l + 1, 0);
-        while(i <= mid && j <= r){
-            int y = nums2[i], z = nums2[j];
-            if(p[y] < p[z]){
-                ans += (long)(re[z] + 1) * be[y];
-                re[y] += r - j + 1;
-                tmp[k++] = y;
-                ++i;
-            }else{
-                be[z] += i - l;
-                tmp[k++] = z;
-                ++j;
+
+    // Encodes a tree to a single string.
+    string serialize(TreeNode* root) {
+        string res;
+        if(!root) return res;
+        TreeNode* node = root;
+        stack<TreeNode*> s;
+        s.push(node);
+        TreeNode* z = new TreeNode(0);
+        while(s.size()){
+            node = s.top();
+            s.pop();
+            if(node == z) res += "#_";
+            else{
+                res += to_string(node->val) + "_";
+                if(node->right) s.push(node->right);
+                else s.push(z);
+                if(node->left) s.push(node->left);
+                else s.push(z);
             }
         }
-        while(i <= mid) tmp[k++] = nums2[i++];
-        while(j <= r){
-            int y = nums2[j];
-            ans += (long)(mid - l + 1) * re[y];
-            be[y] += mid - l + 1;
-            tmp[k++] = nums2[j++];
-        } 
-        for(int i = l; i <= r; ++i){
-            nums2[i] = tmp[i - l];
+        res.pop_back();
+        cout << res << endl;
+        return res;
+    }
+
+    // Decodes your encoded data to tree.
+    TreeNode* deserialize(string data) {
+        vector<string> v = preProcess(data);
+        int n = v.size();
+        if(!n) return NULL;
+        TreeNode* head = new TreeNode(stoi(v[0]));
+        int p = 1;
+        dfs(head, v, p);
+        return head;
+    }
+    void dfs(TreeNode* head, vector<string>& v, int& p){
+        if(p < v.size() && v[p] != "#"){
+            TreeNode* l = new TreeNode(stoi(v[p]));
+            head->left = l;
+            dfs(head->left, v, ++p);
         }
+        ++p;
+        if(p < v.size() && v[p] != "#"){
+            TreeNode* r = new TreeNode(stoi(v[p]));
+            head->right = r;
+            dfs(head->right, v, ++p);
+        }
+    } 
+    vector<string> preProcess(string& s){
+        int n = s.size();
+        int p = 0;
+        vector<string> res;
+        while(p < n){
+            int t = p;
+            while(t < n && s[t] != '_') ++t;
+            string str = s.substr(p, t - p);
+            res.push_back(str);
+            p = t + 1;
+        }
+        return res;
     }
 };
+
+// Your Codec object will be instantiated and called as such:
+// Codec ser, deser;
+// TreeNode* ans = deser.deserialize(ser.serialize(root));
 
 int main() {
 
@@ -147,6 +182,6 @@ int main() {
                                 {"Carla","5","Ceviche"},
                                 {"Rous","3","Ceviche"} };
     Solution so;
-    so.goodTriplets(b, b_);
+    so.deserialize("1_2_#_#_3_4_#_#_5_#_#");
     return 0;
 }

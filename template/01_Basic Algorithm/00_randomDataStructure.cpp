@@ -17,7 +17,7 @@
 
 using namespace std;
 
-vector<int> generateArndomArray(int maxSize, int maxValue){
+vector<int> generateRandomArray(int maxSize, int maxValue){
     srand((unsigned)time(NULL));
     int n = rand() % (maxSize + 2) - 1; 
     vector<int> res(n, 0);
