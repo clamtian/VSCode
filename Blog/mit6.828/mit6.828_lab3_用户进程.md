@@ -83,7 +83,61 @@ void page_remove(pde_t *pgdir, void *va)
 //将虚拟地址va映射至物理页地址pp
 int page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 ```
+以上这些函数会贯穿lab3的始终，所以可以时不时的回顾一下。
 
+在lab3中，我们将实现操作系统的一些基本功能，来实现用户环境下的进程的正常运行。你将会加强JOS内核的功能，为它增添一些重要的数据结构，用来记录用户进程环境的一些信息；创建一个单一的用户环境，并且加载一个程序运行它。你也需要让JOS内核能够完成用户环境所作出的任何系统调用，以及处理用户环境产生的各种异常。
+
+# 2.用户环境
+
+新添加的文件`inc/env.h`里面包含了JOS内核的有关用户环境(User Environment)的一些基本定义。用户环境指的就是一个应用程序运行在系统中所需要的一个上下文环境，操作系统内核使用数据结构 `Env` 来记录每一个用户环境的信息。在这个实验中，我们将会先创建一个用户环境，但是之后我们会把它设计成能够支持多用户环境，即多个用户程序并发执行的系统。
+
+在 `kern/env.c` 文件中我们看到，操作系统一共维护了三个重要的和用户环境相关的全局变量：
+
+```JavaScript
+struct Env *envs = NULL;		// All environments
+struct Env *curenv = NULL;		// The current env
+static struct Env *env_free_list;	// Free environment list
+```
+
+JOS内核使用 Env结构体来追踪用户进程。其中 `envs`变量是指向所有进程的链表的指针，其操作方式跟lab2的`pages`类似，`env_free_list`是空闲的进程结构链表。注意下，在早起的JOS实验中，`pages`和`envs`都是用的双向链表，现在的版本用的单向链表操作起来更加简单和清晰。
+
+JOS系统启动之后，`envs`指针便指向了一个 `Env` 结构体链表，表示系统中所有的用户环境。在我们的设计中，JOS内核将支持同一时刻最多 `NENV`(1024) 个活跃的用户环境，尽管这个数字要比真实情况下任意给定时刻的活跃用户环境数要多很多。系统会为每一个活跃的用户环境在`envs`链表中维护一个 `Env` 结构体。
+
+JOS内核也把所有未执行的`Env`结构体，用`env_free_list`连接起来。这种设计方式非常方便进行用户环境`env`的分配和回收。
+
+内核也会把 `curenv` 指针指向在任意时刻正在执行的用户环境的 `Env` 结构体。在内核启动时，并且还没有任何用户环境运行时，`curenv`的值为NULL。
+
+接下来看一下`Env`结构体的定义：
+
+```JavaScript
+struct Env {
+	struct Trapframe env_tf;	// Saved registers
+	struct Env *env_link;		// Next free Env
+	envid_t env_id;				// Unique environment identifier
+	envid_t env_parent_id;		// env_id of this env's parent
+	enum EnvType env_type;		// Indicates special system environments
+	unsigned env_status;		// Status of the environment
+	uint32_t env_runs;			// Number of times environment has run
+
+	// Address space
+	pde_t *env_pgdir;			// Kernel virtual address of page dir
+};
+```
+
+进程结构体 Env 各字段定义如下：
+
+* env_tf： 当进程停止运行时用于保存寄存器的值，比如当发生中断切换到内核环境运行了或者切换到另一个进程运行的时候需要保存当前进程的寄存器的值以便后续该进程继续执行。
+* env_link：指向空闲进程链表 env_free_list 中的下一个 Env 结构。
+* env_id： 进程ID。因为进程ID是正数，所以符号位是0，而中间的21位是标识符，标识在不同的时间创建但是却共享同一个进程索引号的进程，最后10位是进程的索引号，要用envs索引进程管理结构 Env 就要用 ENVX(env_id)。
+* env_parent_id： 进程的父进程ID。
+* env_type：进程类型，通常是 ENV_TYPE_USER，后面实验中可能会用到其他类型。
+* env_status：进程状态，进程可能处于下面几种状态
+  * ENV_FREE：标识该进程结构处于不活跃状态，存在于 env_free_list 链表。
+  * ENV_RUNNABLE: 标识该进程处于等待运行的状态。
+  * ENV_RUNNING: 标识该进程是当前正在运行的进程。
+  * ENV_NOT_RUNNABLE: 标识该进程是当前运行的进程，但是处于不活跃的状态，比如在等待另一个进程的IPC。
+* ENV_DYING: 该状态用于标识僵尸进程。在实验4才会用到这个状态，实验3不用。
+* env_pgdir：用于保存进程页目录的虚拟地址。
 
 
 
@@ -97,21 +151,6 @@ int page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 我们接着看`mem_init`函数，part1我们已经分析到了`check_page`函数。接下来执行到了`check_kern_pgdir`函数：
 
 
-
-# 2.内存分配
-
-在之后的实验中，我们将会经常遇到一种情况，多个不同的虚拟地址被同时映射到相同的物理页上面。这时我们需要记录一下每一个物理页上存在着多少不同的虚拟地址来引用它，这个值存放在这个物理页的`PageInfo`结构体的`pp_ref`成员变量中。当这个值变为0时，这个物理页才可以被释放。
-
-`check_page`函数是一个测试页面表管理例程，要使这个函数成功运行，我们首先需要完成 exercise4 中的几个函数，下面我们来详细分析一下这几个函数。
-
-## `pgdir_walk()`
-
-这个函数的原型是 `pgdir_walk(pde_t *pgdir, const void *va, int create)`，该函数的功能:给定一个页目录表指针 `pgdir` ，该函数应该返回线性地址`va`所对应的页表项指针。这个`pgdir`其实就是part1中我们初始化的`kern_pgdir`指针，它指向JOS中惟一的页目录表。所以在这里我们应该完成以下几个步骤：
-* 通过页目录表求得这个虚拟地址页目录项地址 `pg_dir_entry`；
-* 判断这个页目录项对应的页表是否已经在内存中；
-* 如果在，计算这个页表的基地址`page_table`，然后返回`va`所对应页表项的地址 `&page_table[PTX(va)]``;
-* 如果不在则分配新的页，并且把这个页的信息添加到页目录项`pg_dir_entry`中;
-* 如果create为false，则返回NULL。
 
 
 
