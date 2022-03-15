@@ -215,9 +215,13 @@ env_run(struct Env *e)
 
 	env_pop_tf(&(curenv->env_tf));
 }
-
 ```
 
+# Exercise 3
+
+> Read Chapter 9, Exceptions and Interrupts in the 80386 Programmer's Manual (or Chapter 5 of the IA-32 Developer's Manual), if you haven't already.
+
+这个exercise是让我们阅读一些关于异常的资料，建议可以看一看，如果阅读英文比较吃力的话，可以去找一些博客来看。
 
 
 
