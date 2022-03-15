@@ -165,15 +165,49 @@ i386_init (kern/init.c)
 进程初始化流程主要包括：
 
 * 给`NENV`个Env结构体在内存中分配空间，并将 envs 结构体的物理地址映射到 从 `UENV` 所指向的线性地址空间，该线性地址空间允许用户访问且只读，所以页面权限被标记为`PTE_U`。
+
 * 调用`env_init`函数初始化envs，将 `NENV` 个进程管理结构Env通过`env_link`串联起来，注意，`env_free_list`要指向第一个 Env，所以这里要用倒序的方式。在`env_init`函数中调用了`env_init_percpu`函数，加载新的全局描述符表。
+  
 * 初始化好了`envs`和`env_free_list`后，接着调用 `ENV_CREATE(user_hello, ENV_TYPE_USER)` 创建用户进程。`ENV_CREATE`是`kern/env.h`中的宏定义，展开就是调用的 `env_create`,只是参数设置成了 `env_create(_binary_obj_user_hello_start, ENV_TYPE_USER)`。`env_create`也是我们要实现的函数，它的功能就是先调用`env_alloc`函数分配好Env结构，初始化Env的各个字段值(如`env_id`，`env_type`，`env_status`以及`env_tf`的用于存储寄存器值的字段，运行用户程序时会将 `env_tf` 的字段值加载到对应的寄存器中)，为该用户进程分配页目录表并调用`load_icode`函数加载程序代码到内存中。
+  
   * `env_alloc`调用`env_setup_vm`函数分配好页目录的页表，并设置页目录项和`env_pgdir`字段)。
   * `load_icode`函数则是先设置cr3寄存器切换到该进程的页目录`env_pgdir`，然后通过`region_alloc`分配每个程序段的内存并按segment将代码加载到对应内存中，加载完成后设置 `env_tf->tf_eip`为Elf的`e_entry`，即程序的初始执行位置。
+  
 * 加载完程序代码后，万事俱备，调用 `env_run(e)` 函数开始运行程序。如果当前有进程正在运行，则设置当前进程状态为`ENV_RUNNABLE`，并将需要运行的进程e的状态设置为`ENV_RUNNING`，然后加载e的页目录表地址 `env_pgdir` 到cr3寄存器中，调用 `env_pop_tf(struct Trapframe *tf)` 开始执行程序e。
+  
 * `env_pop_tf`其实就是将栈指针esp指向该进程的`env_tf`，然后将 `env_tf` 中存储的寄存器的值弹出到对应寄存器中，最后通过 `iret` 指令弹出栈中的元素分别到 EIP, CS, EFLAGS 到对应寄存器并跳转到 CS:EIP 存储的地址执行(当使用`iret`指令返回到一个不同特权级运行时，还会弹出堆栈段选择子及堆栈指针分别到SS与SP寄存器)，这样，相关寄存器都从内核设置成了用户程序对应的值，EIP存储的是程序入口地址。
+  
 * `env_id`的生成规则很有意思，注意一下在`env_free`中并没有重置`env_id`的值，这就是为了用来下一次使用这个env结构体时生成一个新的`env_id`，区分之前用过的`env_id`，从generation的生成方式就能明白了。
 
+## 关于ELF文件
 
+在`load_icode()`函数中，我们要对ELF文件进行解析，之前在lab1中我们讲过了ELF文件的结构，这里再简单介绍一下。
+
+在`load_icode()`函数中我们没有加载真的可执行文件，因为还没有文件系统。这个Lab使用的ELF文件是通过连接器嵌入到内核这个可执行文件中的。ELF文件有多个ProgHdr，对应多个区块，每个区块都有指定好的虚拟地址和长度，我们只需要从ELF中读取出这些信息，把数据拷贝到相应位置就可以。
+
+有内存空间才能执行指令，在拷贝ELF文件中的各个部分到指定位置之前，需要通过已有的分配器给进程足够多的page，用于存放ELF文件镜像。光是ELF文件中的内容还不够，进程执行还需要栈，我们也要给进程栈分配空间，并映射到指定虚拟地址。
+
+**ELF文件结构**
+
+```JavaScript
+struct Elf {
+	uint32_t e_magic;	// must equal ELF_MAGIC
+	uint8_t e_elf[12];
+	uint16_t e_type;
+	uint16_t e_machine;
+	uint32_t e_version;
+	uint32_t e_entry;
+	uint32_t e_phoff;
+	uint32_t e_shoff;
+	uint32_t e_flags;
+	uint16_t e_ehsize;
+	uint16_t e_phentsize;
+	uint16_t e_phnum;
+	uint16_t e_shentsize;
+	uint16_t e_shnum;
+	uint16_t e_shstrndx;
+};
+```
 
 
 

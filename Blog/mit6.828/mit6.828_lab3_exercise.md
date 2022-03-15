@@ -33,134 +33,210 @@ mem_init(void)
 
 # Exercise 2
 > In the file env.c, finish coding the following functions:
-
-env_init()
-Initialize all of the Env structures in the envs array and add them to the env_free_list. Also calls env_init_percpu, which configures the segmentation hardware with separate segments for privilege level 0 (kernel) and privilege level 3 (user).
-env_setup_vm()
-Allocate a page directory for a new environment and initialize the kernel portion of the new environment's address space.
-region_alloc()
-Allocates and maps physical memory for an environment
-load_icode()
-You will need to parse an ELF binary image, much like the boot loader already does, and load its contents into the user address space of a new environment.
-env_create()
-Allocate an environment with env_alloc and call load_icode to load an ELF binary into it.
-env_run()
-Start a given environment running in user mode.
-As you write these functions, you might find the new cprintf verb %e useful -- it prints a description corresponding to an error code. For example,
-
-	r = -E_NO_MEM;
-	panic("env_alloc: %e", r);
-will panic with the message "env_alloc: out of memory".
-> In the file *kern/pmap.c*, you must implement code for the following functions (probably in the order given).
 >
-> `boot_alloc()`
+> `env_init()`
 > 
-> `mem_init()` (only up to the call to `check_page_free_list(1)`)
+> Initialize all of the Env structures in the envs array and add them to the env_free_list. Also calls env_init_percpu, which configures the segmentation hardware with separate segments for privilege level 0 (kernel) and privilege level 3 (user).
 > 
-> `page_init()`
-> 
-> `page_alloc()`
-> 
-> `page_free()`
+> `env_setup_vm()`
 >
-> `check_page_free_list()` and `check_page_alloc()` test your physical page allocator. You should boot JOS and see whether `check_page_alloc()` reports success. Fix your code so that it passes. You may find it helpful to add your own assert()s to verify that your assumptions are correct.
+>Allocate a page directory for a new environment and initialize the kernel portion of the new environment's address space.
+>
+> `region_alloc()`
+> 
+> Allocates and maps physical memory for an environment
+> 
+> `load_icode()`
+> 
+> You will need to parse an ELF binary image, much like the boot loader already does, and load its contents into the user address space of a new environment.
+> 
+> `env_create()`
+> 
+>Allocate an environment with env_alloc and call load_icode to load an ELF binary into it.
+>
+> `env_run()`
+> 
+> Start a given environment running in user mode.
+> 
+> As you write these functions, you might find the new cprintf verb %e useful -- it prints a description corresponding to an error code. For example,
+> ```JAvaScript
+> r = -E_NO_MEM;
+> panic("env_alloc: %e", r);
+> ```
+> 	
+> will panic with the message "env_alloc: out of memory".
 
+这个exercise要求我们实现几个与用户进程运行相关的函数。
 
+## `env_init()`
 
-
-
-
-
-
-
-
-
-
-
-
-
-`nextfree`指针首先被初始化为紧挨着 Kernel Code 之后的一个页帧。`ROUNDUP`的作用是使`nextfree`指针式中对准4KB(一个页帧)的整数倍。由于我们目前只映射了虚拟地址 0xf0000000:0xf0400000，所以一旦超出 0xf0400000 我们需要提醒错误。
-
-## `mem_init()`
-
-接下来我们需要在`mem_init()`函数中添加代码，完成的功能是分配一块内存，用来存放一个`struct PageInfo`的数组，数组中的每一个`PageInfo`代表内存当中的一页。操作系统内核就是通过这个数组来追踪所有内存页的使用情况的。
-
-```JavaScript
-  	pages = (struct PageInfo *)boot_alloc(npages * sizeof(struct PageInfo));
-	memset(pages, 0, npages * sizeof(struct PageInfo));
-```
-
-这部分已经在解析篇中详细介绍过了，这里不再赘述。
-
-## `page_init()`
-
-接下来是`page_init()`函数，这个子函数的功能包括初始化`pages`数组和`pages_free_list`链表，这个链表中存放着所有空闲页的信息。我们可以到这个函数的定义处具体查看，整个函数是由一个循环构成，它会遍历所有内存页所对应的在`npages`数组中的`PageInfo`结构体，并且根据这个页当前的状态来修改这个结构体的状态，如果页已被占用，那么要把`PageInfo`结构体中的`pp_ref`属性置一；如果是空闲页，则要把这个页加入`pages_free_list`链表中。
+`env_init()`函数很简单，就是遍历 `envs` 数组中的所有 Env 结构体，把每一个结构体的 `env_id` 字段置0，因为要求所有的 Env 在 `env_free_list` 中的顺序，要和它在 `envs` 中的顺序一致，所以需要采用头插法。　
 
 ```JavaScript
 void
-page_init(void)
+env_init(void)
 {
-	size_t i;
-	page_free_list = NULL;
-	pages[0].pp_ref = 1;
-	pages[0].pp_link = NULL;
-	size_t index_IOhole_begin = npages_basemem;
-	size_t index_alloc_end = PADDR(boot_alloc(0)) / PGSIZE;
+	env_free_list = NULL;
+	for(int i = NENV - 1; i >= 0; --i){
+		envs[i].env_id = 0;
+		envs[i].env_status = ENV_FREE;
+		envs[i].env_link = env_free_list;
 
-	for (i = 1; i < npages; i++) {
-		if(i >= index_IOhole_begin && i < index_alloc_end){
-			pages[i].pp_ref = 1;
-			pages[i].pp_link = NULL;
-		}else{
-			pages[i].pp_ref = 0;
-			pages[i].pp_link = page_free_list;
-			page_free_list = &pages[i];
+		env_free_list = &envs[i];
+	}
+	// Per-CPU part of the initialization
+	env_init_percpu();
+}
+```
+
+## `env_setup_vm()`
+
+`env_setup_vm()` 函数主要是初始化新的用户环境的页目录表，不过只设置页目录表中和操作系统内核跟内核相关的页目录项，用户环境的页目录项不要设置，因为所有用户环境的页目录表中和操作系统相关的页目录项都是一样的（除了虚拟地址UVPT，这个也会单独进行设置），所以我们可以参照 `kern_pgdir` 中的内容来设置 `env_pgdir` 中的内容。
+
+```JavaScript
+static int
+env_setup_vm(struct Env *e)
+{
+	int i;
+	struct PageInfo *p = NULL;
+
+	// Allocate a page for the page directory
+	if (!(p = page_alloc(ALLOC_ZERO)))
+		return -E_NO_MEM;
+
+	// LAB 3: Your code here.
+	e->env_pgdir = (pde_t *) page2kva(p);
+	p->pp_ref++;
+	memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
+
+	for (i = 0; i < PDX(UTOP); ++i) {
+        e->env_pgdir[i] |= PTE_W | PTE_U;
+    }
+
+	// UVPT maps the env's own page table read-only.
+	// Permissions: kernel R, user R
+	e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
+	return 0;
+}
+
+```
+
+## `region_alloc()`
+
+`region_alloc()` 为用户环境分配物理空间，这里注意我们要先把起始地址和终止地址进行页对齐，对其之后我们就可以以页为单位，为其一个页一个页的分配内存，并且修改页目录表和页表。
+
+```JavaScript
+static void
+region_alloc(struct Env *e, void *va, size_t len)
+{
+	void* start = (void *)ROUNDDOWN((uint32_t)va, PGSIZE);
+    void* end = (void *)ROUNDUP((uint32_t)va+len, PGSIZE);
+    struct PageInfo *p = NULL;
+    void* i;
+    int r;
+
+    for(i = start; i < end; i += PGSIZE){
+        p = page_alloc(0);
+        if(p == NULL)
+           panic(" region alloc failed: allocation failed.\n");
+
+        r = page_insert(e->env_pgdir, p, i, PTE_W | PTE_U);
+        if(r != 0)
+            panic("region alloc failed.\n");
+    }
+}
+```
+
+## `load_icode()`
+
+`load_icode()` 功能是为每一个用户进程设置它的初始代码区，堆栈以及处理器标识位。每个用户程序都是ELF文件，所以我们要解析该ELF文件。
+
+```JavaScript
+static void
+load_icode(struct Env *e, uint8_t *binary)
+{
+	struct Proghdr *ph, *eph;
+	struct Elf *elf = (struct Elf*)binary;
+	
+	if(elf->e_magic != ELF_MAGIC) 
+		panic("There is something wrong in load _icode function!\n");
+	
+	ph = (struct Proghdr *) ((uint8_t *) elf + elf->e_phoff);
+	eph = ph + elf->e_phnum;
+
+	lcr3(PADDR(e->env_pgdir));   //load user pgdir
+	
+	for(; ph < eph; ph++) {
+		if(ph->p_type == ELF_PROG_LOAD){
+			region_alloc(e, (void *)ph->p_va, ph->p_memsz);
+			memmove((void *)ph->p_va, (void *)(binary + ph->p_offset), ph->p_filesz);
+			memset((void *)(ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
 		}
 	}
+	e->env_tf.tf_eip = elf->e_entry;
+	lcr3(PADDR(kern_pgdir));  
+
+	region_alloc(e, (void *)(USTACKTOP - PGSIZE), PGSIZE);
 }
 ```
-其中`index_IOhole_begin`和`index_alloc_end`分别是IOhole的起始地址以及`nextfree`指针所在的地址，在解析篇中我们说过，目前为止内存只有开头的一个页帧以及IOhole和内核段被使用，所以这些区域不应该被插入到`page_free_list`链表中。
 
-## `page_alloc()`
+## `env_create()`
 
-`page_alloc()`函数功能是分配一个物理页，然后返回这个物理页所对应的`PageInfo`结构体。
+`env_create()` 是利用`env_alloc()`函数和`load_icode()`函数，加载一个ELF文件到用户环境中
 
 ```JavaScript
 void
-struct PageInfo *
-page_alloc(int alloc_flags)
+env_create(uint8_t *binary, enum EnvType type)
 {
-	struct PageInfo *res = page_free_list;
-	if(!res) return NULL;
-	page_free_list = page_free_list->pp_link;
-	res->pp_link = NULL;
-	if(alloc_flags & ALLOC_ZERO){
-		memset(page2kva(res), '\0', PGSIZE);
-	}
-	return res;
+	struct Env *e;
+	int res = env_alloc(&e, 0);
+	if(res < 0) panic("load 1st env failed!\n");
+	e->env_type = type;
+	load_icode(e, binary);
 }
 ```
 
-我们首先从`free_page_list`中取出一个空闲页的`PageInfo`结构体，然后修改链表表头，接着需要修改取出的空闲页的`PageInfo`结构体信息，初始化该页的内存。
+## `env_run()`
 
-## `page_free()`
-
-`page_free()`函数的功能就是把一个页的`PageInfo`结构体插入回`page_free_list`空闲页链表，代表回收了这个页。
+`env_run()` 是真正开始运行一个用户环境，注意在运行用户进程之前需要将页目录表切换成用户的。
 
 ```JavaScript
 void
-page_free(struct PageInfo *pp)
+env_run(struct Env *e)
 {
-	if(!pp || pp->pp_ref != 0 || pp->pp_link){
-		panic("page_free : Invalid address, nothing changed...\n");
-		return;
+	if(curenv && curenv->env_status == ENV_RUNNABLE){
+		curenv->env_status = ENV_RUNNABLE;
 	}
-	pp->pp_link = page_free_list;
-	page_free_list = pp;
+	curenv = e;
+	curenv->env_status = ENV_RUNNING;
+	++curenv->env_runs;
+
+	lcr3(PADDR(curenv->env_pgdir));
+
+	env_pop_tf(&(curenv->env_tf));
 }
+
 ```
 
-我们首先需要修改被回收的页的`PageInfo`结构体的相应信息，然后把该结构体插入回`page_free_list`空闲页链表。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # Exercise 2 and Exercise 3
