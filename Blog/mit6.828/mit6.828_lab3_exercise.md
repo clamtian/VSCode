@@ -223,6 +223,20 @@ env_run(struct Env *e)
 
 这个exercise是让我们阅读一些关于异常的资料，建议可以看一看，如果阅读英文比较吃力的话，可以去找一些博客来看。
 
+# Exercise 4
+
+> Edit `trapentry.S` and `trap.c` and implement the features described above. The macros `TRAPHANDLER` and `TRAPHANDLER_NOEC` in `trapentry.S` should help you, as well as the `T_*` defines in `inc/trap.h`. You will need to add an entry point in `trapentry.S` (using those macros) for each trap defined in `inc/trap.h`, and you'll have to provide `_alltraps` which the `TRAPHANDLER` macros refer to. You will also need to modify `trap_init()` to initialize the idt to point to each of these entry points defined in `trapentry.S`; the SETGATE macro will be helpful here.
+>
+> Your `_alltraps` should:
+>
+> * push values to make the stack look like a struct Trapframe
+> * load GD_KD into %ds and %es
+> * pushl %esp to pass a pointer to the Trapframe as an argument to trap()
+> * call trap (can trap ever return?)
+> * Consider using the pushal instruction; it fits nicely with the layout of the struct Trapframe.
+>
+> Test your trap handling code using some of the test programs in the user directory that cause exceptions before making any system calls, such as user/divzero. You should be able to get make grade to succeed on the divzero, softint, and badsegment tests at this point.
+
 
 
 

@@ -250,11 +250,6 @@ struct Elf {
 
 x86 使用0-31号中断向量作为处理器内部的同步的异常类型，比如除零和缺页异常。而32号之上的中断向量用于软件中断(如int指令产生的软件中断)或者外部设备产生的异步的硬件中断。lab3我们会用到0-31号以及48号(用于系统调用)中断向量，在后面实验中还会处理外部的时钟中断。
 
-除此之外，当异常或中断发生时，处理器还需要一个地方来存放旧处理器的状态，比如EIP和CS寄存器的值。这样的话，中断处理程序一会可以重新返回到原来的程序中。这段内存自然也要保护起来，不能被用户态的程序所篡改。
-
-正因为如此，当一个x86处理器要处理一个中断或异常并且使运行特权级从用户态转为内核态时，它也会同时切换到内核空间中的一个栈。一个叫做 “任务状态段(task state segment TSS)”的数据结构将会详细记录这个堆所在的地址。处理器会把SS，ESP，EFLAGS，CS，EIP以及一个可选错误码等等这些值压入到这个栈上。然后加载中断处理程序的CS，EIP值，并且设置ESP，SS寄存器指向中断处理程序所在的堆栈。
-
-尽管TSS非常大，并且还有很多其他的功能，但是JOS仅仅使用它来定义处理器从用户态转向内核态所采用的内核堆栈，由于JOS中的内核态指的就是特权级0，所以处理器用TSS中的ESP0，SS0字段来指明这个内核堆栈的位置和大小。JOS不使用任何其它TSS字段。
 
 ## 2.2 中断/异常处理流程
 
@@ -262,148 +257,92 @@ x86 使用0-31号中断向量作为处理器内部的同步的异常类型，比
 
 ![avatar](./image/异常处理流程.png)
 
+除此之外，当异常或中断发生时，处理器还需要一个地方来存放旧处理器的状态，比如EIP和CS寄存器的值。这样的话，中断处理程序一会可以重新返回到原来的程序中。这段内存自然也要保护起来，不能被用户态的程序所篡改。
 
+正因为如此，当一个x86处理器要处理一个中断或异常并且使运行特权级从用户态转为内核态时，它也会同时切换到内核空间中TSS指定的栈里。处理器会把SS，ESP，EFLAGS，CS，EIP以及一个可选错误码等等这些值压入到这个栈上。然后加载中断处理程序的CS，EIP值，并且设置ESP，SS寄存器指向中断处理程序所在的堆栈。
 
+我们可以使用TSS指定任意内核地址作为系统调用的栈，在这里我们使用了内核的栈`KSTACKTOP`当做中断栈。
 
+尽管TSS非常大，并且还有很多其他的功能，但是JOS仅仅使用它来定义处理器从用户态转向内核态所采用的内核堆栈，由于JOS中的内核态指的就是特权级0，所以处理器用TSS中的ESP0，SS0字段来指明这个内核堆栈的位置和大小。JOS不使用任何其它TSS字段。
 
+## 2.3 中断/异常处理实例
 
+假设处理器正在用户状态下运行代码，但是遇到了一个除法指令，并且除数为0。
 
+* 处理器会首先切换自己的堆栈，切换到由TSS的SS0，ESP0字段所指定的内核堆栈区，这两个字段分别存放着GD_KD和KSTACKTOP的值。
+* 处理器把异常参数压入到内核堆栈中，起始于地址KSTACKTOP：
 
-
-
-
-
-
-这个lab的核心就是要搞清楚 `x86` 的内存管理机制，强烈建议大家阅读Lab讲义、Lab搭配的[指导书](https://pdos.csail.mit.edu/6.828/2018/readings/i386/c05.htm) 和Lab已经提供的代码，对照着本文来进行理解。
-
-先来看看 `x86` 的内存管理架构：
-
+```javascript
+     +--------------------+ KSTACKTOP             
+     | 0x00000 | old SS   |     " - 4 
+     |      old ESP       |     " - 8 
+     |     old EFLAGS     |     " - 12 
+     | 0x00000 | old CS   |     " - 16 
+     |      old EIP       |     " - 20 <---- ESP 
+     +--------------------+             
 ```
 
-           Selector  +--------------+         +-----------+
-          ---------->|              |         |           |
-                     | Segmentation |         |  Paging   |
-Software             |              |-------->|           |---------->  RAM
-            Offset   |  Mechanism   |         | Mechanism |
-          ---------->|              |         |           |
-                     +--------------+         +-----------+
-        Virtual(Logical)              Linear                 Physical
-```
-我们代码中的 C 指针就是虚拟地址(virtual address，也称逻辑地址logical address)中的 offset，通过描述符表和段选择子(selector)，通过分段机制转换为线性地址(linear address)，因为JOS中设置的段基址为0，所以线性地址就等于offset，也就是我们代码中的c指针。在未开启分页之前，线性地址就是物理地址。而在我们开启分页之后，线性地址经过 CPU 的MMU部件的页式转换得到物理地址(physical address)，而物理地址就是数据真正存在内存上的地址。
+* 因为我们要处理的是除零异常，它的中断向量是0，处理器会读取IDT表中的0号表项，并且把CS:EIP的值设置为0号中断处理函数的地址值。
+* 中断处理函数开始执行，并且处理中断。
+  
+对于某些特定的异常，除了上面图中要保存的五个值之外，还要再压入一个字，叫做错误码(error code)。比如缺页异常。当压入错误码之后，内核堆栈的状态如下：
 
-从现实上来看，一个线性地址就是一个32位的 `uint32_t` 类型。具体组成如下图：
-
-![avatar](./image/linear_address.png)
-
-开启分页后，当处理器碰到一个线性地址后，它的MMU部件会把这个地址分成 3 部分，分别是页目录索引(DIR)、页表索引(PAGE)和页内偏移(OFFSET)， 这 3 个部分把原本 32 位的线性地址分成了 10+10+12 的 3 个片段，虚拟地址向物理地址转换的过程如下：
-
-![avatar](./image/page_translation.png)
-
-我们来详述上图的流程：如何通过一个32位的线性地址找到它所对应的物理地址呢？首先，我们需要一个 `pgdir` 指针，这个指针指向上图中的页目录表 Page Directory 的首地址。而线性地址的 DIR 部分又指向了这个 Page Directory 中的一个页目录表项 DIR ENTRY，这个 DIR ENTRY 又指向了一个页表 Page Table 的首地址，同样，PAGE 部分又指向了这个 Page Table 中的一个页表项 ENTRY，而这个 ENTRY 就指向了一块物理地址，这块物理地址的大小是 4KB，称为页帧(page frame，也称页面，更具体地，和这块物理地址相对应的虚拟地址称为虚拟页Virtual Page，这块物理地址称为物理页Physical Page)，OFFSET最终指向了这个页帧中的一个地址。以上就完成了线性地址向物理地址的转换。由于 DIR 和 PAGE 长度为10，所以一个32位的线性地址最终能表示的物理地址最大为 $2^{10} \times 2^{10} \times 4KB = 4GB$。而通常我们说每个用户进程虚拟地址空间为4GB，其实就是每个进程都有一个页目录表  `pgdir` ，进程运行时将页目录地址装载到CR3寄存器中，从而每个进程最大可以用4GB内存。在JOS中，为了简单起见，只用了一个页目录表，整个系统的线性地址空间4GB是被内核和所有其他的用户程序所共用的。
-
->## entry格式
-
-![avatar](./image/entry.png)
-
-ENTRY不仅包含了地址信息，还包含了很多其他有用的信息。DIR ENTRY 和 PG TBL ENTRY 的格式相同，除了前20位包含地址信息，它们还包含：
-
-* P：Present，判断对应物理页面是否存在，存在为1，否则为0；
-* W：Write，判断对应的物理页面是否可写，可写为1，不可写为0；
-* U：User，定义页面的访问者所需要的权限，为1则所有user都可访问，为0则需要特权用户才能访问；
-* WT：Write-though，定义对应物理页面的写方式，为1则为直写，为0则为回写
-* CD：Cache-disabled，1为禁用缓存，0为不禁用；
-* D：Ditry，数据是否被修改，1为是，0为否；
-* A：Accessed，数据最近是否被访问；
-* AVL：Available，是否可以被系统程序所使用
-
-
-# 3.页面管理
-
-通过页表和虚拟地址我们找到了相对应的物理地址，现在我们来看看JOS在形式上是怎么来管理这块内存的。在lab1中我们通过一个手写的页表实现了将 0xf0000000:0xf0400000 这4MB虚拟地址映射至物理地址 0x00000000:0x00400000，在lab2中我们需要将映射拓展至256MB。
-
-JOS在 *kern/pmap.h* 中提供了两个宏函数 `KADDR(pa)` 和 `PADDR(va)`，前者将物理地址转换为虚拟地址，后者将虚拟地址转换为物理地址。不过注意，我们之前只完成了4MB的内存映射，所以这里的虚拟地址 `va` 的有效范围是 0xf0000000:0xf0400000，物理地址 `pa` 的有效范围是 0x00000000:0x00400000，除此之外的地址会报错。
-
-```JavaScript
-/* This macro takes a kernel virtual address -- an address that points above
- * KERNBASE, where the machine's maximum 256MB of physical memory is mapped --
- * and returns the corresponding physical address.  It panics if you pass it a
- * non-kernel virtual address.
- */
-#define PADDR(kva) _paddr(__FILE__, __LINE__, kva)
-
-/* This macro takes a physical address and returns the corresponding kernel
- * virtual address.  It panics if you pass an invalid physical address. */
-#define KADDR(pa) _kaddr(__FILE__, __LINE__, pa)
+```javascript
+     +--------------------+ KSTACKTOP             
+     | 0x00000 | old SS   |     " - 4 
+     |      old ESP       |     " - 8 
+     |     old EFLAGS     |     " - 12 
+     | 0x00000 | old CS   |     " - 16 
+     |      old EIP       |     " - 20 
+	 |    error code      |     " - 24 <---- ESP 
+     +--------------------+             
 ```
 
-上面代码注释中的 `KERNBASE` 定义在 *inc/memlayout.h* 中：
+以上几步都是由硬件自动完成的。
 
-```JavaScript
-// All physical memory mapped at this address
-#define	KERNBASE	0xF0000000
+处理器在用户态下和内核态下都可以处理异常或中断。只有当处理器从用户态切换到内核态时，才会自动地切换堆栈，并且把一些寄存器中的原来的值压入到堆栈上，并且触发相应的中断处理函数。但如果处理器已经由于正在处理中断而处在内核态下时，此时CPU只会向内核堆栈压入更多的值。通过这种方式，内核就可处理嵌套中断。
+　
+如果处理器已经在内核态下并且遇到嵌套中断，因为它不需要切换堆栈，所以它不需要存储SS，ESP寄存器的值。此时内核堆栈的就像下面这个样子：
+
+```javascript
+     +--------------------+ <---- old ESP
+     |     old EFLAGS     |     " - 4 
+     | 0x00000 | old CS   |     " - 8 
+     |      old EIP       |     " - 12 
+     +--------------------+             
 ```
 
-操作系统必须要追踪记录哪些内存区域是空闲的，哪些是被占用的。JOS内核是以页(page)为最小粒度来管理内存的，它使用MMU来映射，保护每一块被分配出去的内存。JOS是通过链表来管理空闲物理内存块-->页帧(page frame)的，这个链表结构为 `struct PageInfo`，其定义在：
+除此之外，如果处理器在内核态下接受一个异常，而且由于一些原因，比如堆栈空间不足，不能把当前的状态信息（寄存器的值）压入到内核堆栈中时，那么处理器是无法恢复到原来的状态了，它会自动重启。
 
-```JavaScript
-struct PageInfo {
-	// Next page on the free list.
-	struct PageInfo *pp_link;
 
-	// pp_ref is the count of pointers (usually in page table entries)
-	// to this page, for pages allocated using page_alloc.
-	// Pages allocated at boot time using pmap.c's
-	// boot_alloc do not have valid reference count fields.
+## 2.4 JOS中的中断/异常处理
 
-	uint16_t pp_ref;
-};
-```
+`kern/init.c`中调用了宏函数`ENV_CREATE`，从而指定了在之后的`env_run`中要执行的进程。可以执行的进程在`user`目录下的一系列C文件中写好了，都非常简单。给`ENV_CREATE`传`user_*`，*处填写对应在`user`目录下的文件名就可以了。一开始使用的是`user_hello`，就是对应`user/hello.c`。函数`env_run`里调用了`env_pop_tf`函数，`env_pop_tf`函数上面已经讲过了，我们这里来深入一下：
 
-这个 `PageInfo` 将所有未使用的页帧连起来，当需要分配内存时，将链表头部返回，并将链表头部更新为链表中的下一个元素。 `PageInfo` 中的 pp_ref 保存的是 `PageInfo` 对应物理页面的引用次数，当这个 pp_ref 为0时，就说明没有程序在使用这个页帧，所以这个物理页帧就应该被回收。
+函数`env_pop_tf`接受一个指针，包含了和进程有关的信息。函数做了这些事情：
 
-## 页面操作相关的宏
+将栈指针esp指向该进程指针的`env_tf`，然后将 `env_tf` 中存储的寄存器的值弹出到对应寄存器中，最后通过 `iret` 指令弹出栈中的元素分别到 EIP, CS, EFLAGS 到对应寄存器并跳转到 CS:EIP 存储的地址执行(当使用`iret`指令返回到一个不同特权级运行时，还会弹出堆栈段选择子及堆栈指针分别到SS与SP寄存器)，这样，相关寄存器都从内核设置成了用户程序对应的值，EIP存储的是程序入口地址。
 
-这些宏定义在 *inc/mmu.h* 中：
 
-```JavaScript
-// 线性地址分为如下三部分
-//
-// +--------10------+-------10-------+---------12----------+
-// | Page Directory |   Page Table   | Offset within Page  |
-// |      Index     |      Index     |                     |
-// +----------------+----------------+---------------------+
-//  \--- PDX(la) --/ \--- PTX(la) --/ \---- PGOFF(la) ----/
-//  \---------- PGNUM(la) ----------/
 
-// 页号
-#define PGNUM(la)   (((uintptr_t) (la)) >> PTXSHIFT)
 
-// 页目录项索引(高10位)
-#define PDX(la)     ((((uintptr_t) (la)) >> PDXSHIFT) & 0x3FF)
 
-// 页表项索引（中间10位）
-#define PTX(la)     ((((uintptr_t) (la)) >> PTXSHIFT) & 0x3FF)
 
-// 页内偏移
-#define PGOFF(la)   (((uintptr_t) (la)) & 0xFFF)
 
-// 构造线性地址
-#define PGADDR(d, t, o) ((void*) ((d) << PDXSHIFT | (t) << PTXSHIFT | (o)))
 
-// 页目录和页表的一些常量定义
-#define NPDENTRIES  1024   //每个页目录的页目录项数目为1024
-#define NPTENTRIES  1024   //每个页表的页表项数目也为1024
 
-#define PGSIZE      4096   // 页大小为4096B，即4KB
-#define PGSHIFT     12      // log2(PGSIZE)
 
-#define PTSIZE      (PGSIZE*NPTENTRIES) // 一个页目录项映射内存大小，4MB
-#define PTSHIFT     22      // log2(PTSIZE)
 
-#define PTXSHIFT    12       
-#define PDXSHIFT    22  
 
-```
+
+
+
+
+
+
+
+
+
 
 # 4.分页管理开启流程
 

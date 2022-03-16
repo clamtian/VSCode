@@ -70,7 +70,7 @@ boot.S主要是将处理器从实模式转换到32位的保护模式，因为只
 
 ELF可执行文件是由 ELF文件头、程序头表(program header table)、节头表(section header table)和文件内容四部分组成的。而文件内容部分又由.text 节、.rodata 节、.stab 节、.stabstr 节、.data 节、.bss 节、.comment 节等部分组成。在这里我们只对以下几个部分感兴趣：
 
-```JavaScript
+```javascript
 .text: 程序的可执行指令
 .rodata: 只读数据，例如由C编译器生成的ASCII码。
 .data: 包含程序的初始化数据，例如使用 int x = 5 声明的全局变量；
@@ -79,7 +79,7 @@ ELF可执行文件是由 ELF文件头、程序头表(program header table)、节
 当链接器计算程序的内存布局时，它会在.bss节中为未初始化的全局变量保留空间，如 `int x;`，c程序默认未初始化的全局变量值为零。因此，不需要在ELF二进制文件中存储.bss的内容，只是记录了.bss部分的地址和大小。
 
 可以使用 objdump 命令查看 ELF 文件的节信息：
-```JavaScript
+```javascript
 $ objdump -h obj/boot/boot.out
 
 obj/boot/boot.out:     file format elf32-i386
