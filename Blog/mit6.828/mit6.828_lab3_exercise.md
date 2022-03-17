@@ -221,7 +221,7 @@ env_run(struct Env *e)
 
 > Read Chapter 9, Exceptions and Interrupts in the 80386 Programmer's Manual (or Chapter 5 of the IA-32 Developer's Manual), if you haven't already.
 
-这个exercise是让我们阅读一些关于异常的资料，建议可以看一看，如果阅读英文比较吃力的话，可以去找一些博客来看。
+这个exercise是让我们阅读一些关于中断和异常的资料，建议可以看一看，如果阅读英文比较吃力的话，可以去找一些博客来看。
 
 # Exercise 4
 
@@ -363,6 +363,90 @@ trap_init(void)
 }
 ```
 
+## Challenge
+> Challenge! You probably have a lot of very similar code right now, between the lists of `TRAPHANDLER` in `trapentry.S` and their installations in `trap.c`. Clean this up. Change the macros in `trapentry.S` to automatically generate a table for `trap.c` to use. Note that you can switch between laying down code and data in the assembler by using the directives `.text` and `.data`.
+
+这块是让我们对`trapentry.S`中的代码进行重构，提高代码利用率。
+
+宏定义修改：
+
+```javascript
+* Use ec = 1 for traps where the CPU automatically push an error code and ec = 0 for not.
+ * Use user = 1 for a syscall; user = 0 for a normal trap.
+ */
+#define TRAPHANDLER(name, num, ec, user)      \
+.text;                                        \
+        .globl name;            /* define global symbol for 'name' */   \
+        .type name, @function;  /* symbol type is function */           \
+        .align 2;               /* align function definition */         \
+        name:                   /* function starts here */              \
+        .if ec==0;                                                      \
+                pushl $0;                                               \
+        .endif;                                                         \
+        pushl $(num);                                                   \
+        jmp _alltraps;                                                  \
+.data;                                                                  \
+        .long  name, num, user
+```
+
+修改`TRAPHANDLER`宏定义整合代码，在定义函数的同时(`.text`)定义相应的数据(`.data`)，然后定义1个全局数组，利用前面定义的宏实现该数组的填充。
+
+```javascript
+data
+        .globl  entry_data
+        entry_data:
+.text
+TRAPHANDLER(divide_entry, T_DIVIDE, 0, 0);
+TRAPHANDLER(debug_entry, T_DEBUG, 0, 0);
+TRAPHANDLER(nmi_entry, T_NMI, 0, 0);
+TRAPHANDLER(brkpt_entry, T_BRKPT, 0, 1);
+TRAPHANDLER(oflow_entry, T_OFLOW, 0, 0);
+TRAPHANDLER(bound_entry, T_BOUND, 0, 0);
+TRAPHANDLER(illop_entry, T_ILLOP, 0, 0);
+TRAPHANDLER(device_entry, T_DEVICE, 0, 0);      
+TRAPHANDLER(dblflt_entry, T_DBLFLT, 1, 0);
+TRAPHANDLER(tts_entry, T_TSS, 1, 0);
+TRAPHANDLER(segnp_entry, T_SEGNP, 1, 0);
+TRAPHANDLER(stack_entry, T_STACK, 1, 0);
+TRAPHANDLER(gpflt_entry, T_GPFLT, 1, 0);
+TRAPHANDLER(pgflt_entry, T_PGFLT, 1, 0);
+TRAPHANDLER(fperr_entry, T_FPERR, 0, 0);
+TRAPHANDLER(align_entry, T_ALIGN, 1, 0);
+TRAPHANDLER(mchk_entry, T_MCHK, 0, 0);
+TRAPHANDLER(simderr_entry, T_SIMDERR, 0, 0);
+TRAPHANDLER(syscall_entry, T_SYSCALL, 0, 1);
+.data
+        .long 0, 0, 0   // interupt end identify
+```
+
+最后在`trap_init`函数中就可以使用该全局数组对idt进行初始化。
+
+```javascript
+void
+trap_init(void)
+{
+        extern struct Segdesc gdt[];
+        extern long entry_data[][3];
+        int i;
+
+        for (i = 0; entry_data[i][0] != 0; i++ )
+                SETGATE(idt[entry_data[i][1]], 0, GD_KT, entry_data[i][0], entry_data[i][2]*3);
+
+        trap_init_percpu();
+}
+```
+
+## Questions
+
+> Answer the following questions in your answers-lab3.txt:
+> 
+> What is the purpose of having an individual handler function for each exception/interrupt? (i.e., if all exceptions/interrupts were delivered to the same handler, what feature that exists in the current implementation could not be provided?)
+
+不同的中断或者异常需要不同的中断处理函数，因为不同的异常/中断需要不同的处理方式，比如有些异常是代表指令有错误，那么不会返回被中断的命令。而有些中断可能只是为了处理外部IO事件，此时执行完中断函数还要返回到被中断的程序中继续运行。
+
+> Did you have to do anything to make the user/softint program behave correctly? The grade script expects it to produce a general protection fault (trap 13), but softint's code says int $14. Why should this produce interrupt vector 13? What happens if the kernel actually allows softint's int $14 instruction to invoke the kernel's page fault handler (which is interrupt vector 14)?
+
+ 因为当前的系统正在运行在用户态下，特权级为3，而INT指令为系统指令，特权级为0。特权级为3的程序不能直接调用特权级为0的程序，会引发一个`General Protection Exception`，即trap 13。
 
 
 
@@ -379,20 +463,16 @@ trap_init(void)
 
 
 
-# Exercise 2 and Exercise 3
 
-> 一些理论和操作性的东西，理论篇已经分析过了。
 
-## Question
-> Assuming that the following JOS kernel code is correct, what type should variable x have, uintptr_t or physaddr_t?
-> ```JavaScript
->	mystery_t x;
->	char* value = return_a_pointer();
->	*value = 10;
->	x = (mystery_t) value;
-> ```
 
-由于我们在代码中使用的指针都是虚拟地址，所以 `x` 的类型应是 `uintptr_t`。
+
+
+
+
+
+
+
 
 # Exercise 4
 > In the file *kern/pmap.c*, you must implement code for the following functions.
@@ -409,133 +489,11 @@ trap_init(void)
 >	
 > `check_page()`, called from `mem_init()`, tests your page table management routines. You should make sure it reports success before proceeding.
 
-## `pgdir_walk()`
-
-这个函数的原型是 `pgdir_walk(pde_t *pgdir, const void *va, int create)`，该函数的功能:给定一个页目录表指针 `pgdir` ，该函数应该返回线性地址`va`所对应的页表项指针。这个`pgdir`其实就是part1中我们初始化的`kern_pgdir`指针，它指向JOS中惟一的页目录表。所以在这里我们应该完成以下几个步骤：
-* 通过页目录表求得这个虚拟地址页目录项地址 `pg_dir_entry`；
-* 判断这个页目录项对应的页表是否已经在内存中；
-* 如果在，计算这个页表的基地址`page_table`，然后返回`va`所对应页表项的地址 `&page_table[PTX(va)]``;
-* 如果不在则分配新的页，并且把这个页的信息添加到页目录项`pg_dir_entry`中;
-* 如果create为false，则返回NULL。
-
-```JavaScript
-pte_t *
-pgdir_walk(pde_t *pgdir, const void *va, int create)
-{
-	pde_t pgdir_index = PDX(va);
-	pde_t pgtab_index = PTX(va);
-	pde_t pg_offset = PGOFF(va);
-	pde_t *pgdir_add = &pgdir[pgdir_index];
-	
-	if(!(*pgdir_add & PTE_P)){
-		if(!create) return NULL;
-		struct PageInfo* new_page = page_alloc(ALLOC_ZERO);
-		if(!new_page) return NULL;
-		new_page->pp_ref++;
-		*pgdir_add = (page2pa(new_page) | PTE_P | PTE_W | PTE_U);
-	}
-	pde_t *pgtab = KADDR(PTE_ADDR(*pgdir_add));
-	return &pgtab[pgtab_index];
-}
-```
-
-## `boot_map_region()`
-
-函数原型 `static void boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)`，这个函数的功能是把虚拟地址空间范围`[va, va+size)`映射到物理空间`[pa, pa+size)`的映射关系加入到页表`pgdir`中。这个函数主要的目的是为了设置虚拟地址UTOP之上的地址范围，这一部分的地址映射是静态的，在操作系统的运行过程中不会改变，所以这些页的`PageInfo`结构体中的`pp_ref`域的值不会发生改变。
-
-```JavaScript
-static void
-boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
-{
-	uint32_t len = size / PGSIZE;
-	for(uint32_t i = 0; i < len; ++i){
-		pte_t *pg_table_entry = pgdir_walk(pgdir, (void *)va, 1);
-		if(!pg_table_entry){
-			panic("boot_map_region : something error happened...\n");
-			return;
-		}
-		*pg_table_entry = pa | perm | PTE_P;
-		pa += PGSIZE;
-		va += PGSIZE;
-	}
-}
-```
-
-## `page_lookup()`
-接下来继续完成`page_lookup()`函数，函数原型`struct PageInfo * page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)`， 函数的功能为返回虚拟地址`va`所映射的物理页的`PageInfo`结构体的指针，如果`pte_store`参数不为0，则把这个物理页的页表项地址存放在`pte_stor`e中。
-
-```JavaScript
-struct PageInfo *
-page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
-{
-	pte_t *pg_table_entry = pgdir_walk(pgdir, (void *)va, 0);
-	if(!pg_table_entry || !(*pg_table_entry & PTE_P)) return NULL;
-
-	struct PageInfo *page = pa2page(PTE_ADDR(*pg_table_entry));
-	if(pte_store) *pte_store = pg_table_entry ;
-
-	return page;
-}
-```
-
-## `page_remove()`
-
-`page_remove`函数，它的原型是`void page_remove(pde_t *pgdir, void *va)`，功能就是把虚拟地址va和物理页的映射关系删除。
-
-```JavaScript
-void
-page_remove(pde_t *pgdir, void *va)
-{
-	pte_t *entry = NULL;
-	struct PageInfo *page = page_lookup(pgdir, va, &entry);
-	tlb_invalidate(pgdir, va);
-	page_decref(page);
-	*entry = 0;
-}
-```
-
-## `page_insert()`
-
-接下来继续查看`page_insert()`，函数原型 `page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)`，把一个物理内存中页`pp`与虚拟地址`va`建立映射关系。
-* 首先通过`pgdir_walk`函数求出虚拟地址`va`所对应的页表项；
-* 修改`pp_ref`的值；
-* 查看这个页表项，确定`va`是否已经被映射，如果被映射，则删除这个映射；
-* 把`va`和`pp`之间的映射关系加入到页表项中。
-
-```JavaScript
-int
-page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
-{
-	pte_t *pte = pgdir_walk(pgdir, va, 1);
-	if (pte == NULL) {
-	    return -E_NO_MEM;
-	}
-	if (*pte & PTE_P) {
-	    if (PTE_ADDR(*pte) != page2pa(pp)) {
-            page_remove(pgdir, va);
-        }
-	}
-	if (PTE_ADDR(*pte) != page2pa(pp)) {
-	    ++pp->pp_ref;
-	}
-	*pte = page2pa(pp) | perm | PTE_P;
-	return 0;
-}
-```
 
 # Exercise 5
 > Fill in the missing code in `mem_init()` after the call to `check_page()`.
 > Your code should now pass the `check_kern_pgdir()` and `check_page_installed_pgdir()` checks.
 
-在`mem_init()` 中`check_page()`后添加以下内容：
-
-```JavaScript
-	boot_map_region(kern_pgdir, UPAGES, PTSIZE, PADDR(pages), PTE_U);
-	boot_map_region(kern_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_W);
-	boot_map_region(kern_pgdir, KERNBASE, 0xffffffff - KERNBASE, 0, PTE_W);
-```
-
-上述添加代码的具体功能我们在理论篇中已经分析过了，这里就不再赘述。
 
 ## Question
 
@@ -543,28 +501,12 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 
 > What entries (rows) in the page directory have been filled in at this point? What addresses do they map and where do they point? 
 
-|   Entry  |        Base Virtual Address          |    Points to (logically)   |
-|   1024   |        0xffc00000                    |    kernel space            |
-|   ...    |        ...                           |    kernel space            |
-|   960    |        0xf0000000(KERNBASE)          |    kernel space            |
-|   959    |        0xeffc0000(KSTACKTOP-KSTSIZE) |    bootstack               |
-|   957    |        0xef400000(UVPT)              |    kern_pgdir              |
-|   956    |        0xef000000(UPAGES)            |    pages                   | 
-
-基本上就是我们在exercise5中完成的那几个映射区域。具体地以UPAGES为例，这部分映射的地址是pages数组对应的物理地址，UPAGES的地址为0xef000000，取其二进制的前十位11 1011 1100就得到其所在的entry，即956.
-
 > We have placed the kernel and user environment in the same address space. Why will user programs not be able to read or write the kernel's memory? What specific mechanisms protect the kernel memory?
 
-用户程序不能去随意修改内核中的代码，数据，否则可能会破坏内核，造成程序崩溃。正常的操作系统通常采用两个部件来完成对内核地址的保护，一个是通过段机制来实现的，但是JOS中的分段功能并没有实现。二就是通过分页机制来实现，通过把页表项中的 PTE_U 置0，那么用户态的代码就不能访问内存中的这个页。
 
 > What is the maximum amount of physical memory that this operating system can support? Why?
 
-pages数组映射到的线性地址UPAGES为4MB，也就是JOS利用一个大小为4MB的空间UPAGES来存放所有的页的PageInfo结构体信息，每个结构体的大小为8B，所以一共可以存放512K个PageInfo结构体，所以一共可以出现512K个物理页，每个物理页大小为4KB，自然总的物理内存占2GB。
 
 > How much space overhead is there for managing memory, if we actually had the maximum amount of physical memory? How is this overhead broken down?
 
-首先需要存放所有的PageInfo，需要4MB，需要存放页目录表kern_pgdir，大小为 $1024 \times 4B = 4KB$，还需要存放所有的页表，大小为 $2GB \div 4KB \times 4B = 2MB$。所以总的开销就是 $6MB + 4KB$。
-
 > Revisit the page table setup in *kern/entry.S* and *kern/entrypgdir.c*. Immediately after we turn on paging, EIP is still a low number (a little over 1MB). At what point do we transition to running at an EIP above `KERNBASE`? What makes it possible for us to continue executing at a low EIP between when we enable paging and when we begin running at an EIP above `KERNBASE`? Why is this transition necessary?
-
-在*entry.S*文件中有一个指令 `jmp *%eax`，这个指令要完成跳转，就会重新设置EIP的值，把它设置为寄存器eax中的值，而这个值是大于`KERNBASE`的，所以就完成了EIP从小的值到大于`KERNBASE`的值的转换。在`entry_pgdir`这个页表中，也把虚拟地址空间[0, 4MB)映射到物理地址空间[0, 4MB)上，所以当访问位于[0, 4MB)之间的虚拟地址时，可以把它们转换为物理地址。
