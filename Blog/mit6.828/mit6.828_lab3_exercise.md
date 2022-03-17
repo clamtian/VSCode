@@ -237,9 +237,131 @@ env_run(struct Env *e)
 >
 > Test your trap handling code using some of the test programs in the user directory that cause exceptions before making any system calls, such as user/divzero. You should be able to get make grade to succeed on the divzero, softint, and badsegment tests at this point.
 
+首先看一下 `trapentry.S` 文件，里面定义了两个宏定义，`TRAPHANDLER`和`TRAPHANDLER_NOEC`。他们的功能从汇编代码中可以看出：声明了一个全局符号`name`，并且这个符号是函数类型的，代表它是一个中断处理函数名。其实这里就是两个宏定义的函数。这两个函数就是当系统检测到一个中断/异常时，需要首先完成的一部分操作，包括：中断异常码，中断错误码(error code)。正是因为有些中断有中断错误码，有些没有，所以我们采用了两个宏定义函数。
 
+```javascript
+#define TRAPHANDLER(name, num)						\
+	.globl name;		/* define global symbol for 'name' */	\
+	.type name, @function;	/* symbol type is function */		\
+	.align 2;		/* align function definition */		\
+	name:			/* function starts here */		\
+	pushl $(num);							\
+	jmp _alltraps
 
+/* Use TRAPHANDLER_NOEC for traps where the CPU doesn't push an error code.
+ * It pushes a 0 in place of the error code, so the trap frame has the same
+ * format in either case.
+ */
+#define TRAPHANDLER_NOEC(name, num)					\
+	.globl name;							\
+	.type name, @function;						\
+	.align 2;							\
+	name:								\
+	pushl $0;							\
+	pushl $(num);							\
+	jmp _alltraps
 
+.text
+
+/*
+ * Lab 3: Your code here for generating entry points for the different traps.
+ */
+ 
+TRAPHANDLER_NOEC(handler0, T_DIVIDE)
+TRAPHANDLER_NOEC(handler1, T_DEBUG)
+TRAPHANDLER_NOEC(handler2, T_NMI)
+TRAPHANDLER_NOEC(handler3, T_BRKPT)
+TRAPHANDLER_NOEC(handler4, T_OFLOW)
+TRAPHANDLER_NOEC(handler5, T_BOUND)
+TRAPHANDLER_NOEC(handler6, T_ILLOP)
+TRAPHANDLER(handler7, T_DEVICE)
+TRAPHANDLER_NOEC(handler8, T_DBLFLT)
+TRAPHANDLER(handler10, T_TSS)
+TRAPHANDLER(handler11, T_SEGNP)
+TRAPHANDLER(handler12, T_STACK)
+TRAPHANDLER(handler13, T_GPFLT)
+TRAPHANDLER(handler14, T_PGFLT)
+TRAPHANDLER_NOEC(handler16, T_FPERR)
+TRAPHANDLER_NOEC(handler48, T_SYSCALL)
+```
+
+然后就会调用 `_alltraps`，`_alltraps`函数其实就是为了能够让程序在之后调用`trap.c`中的`trap`函数时，能够正确的访问到输入的参数，即`Trapframe`指针类型的输入参数`tf`。
+
+```javascript
+/*
+ * Lab 3: Your code here for _alltraps
+ */
+_alltraps:
+	pushl %ds
+	pushl %es
+	pushal
+	movw $GD_KD, %ax
+	movw %ax, %ds
+	movw %ax, %es
+	pushl %esp
+	call trap /*never return*/
+
+1:jmp 1b
+```
+
+最后在`trap.c`中实现`trap_init`函数，即在idt表中插入中断向量描述符，可以使用`SETGATE`宏实现：
+
+`SETGATE`宏的定义：
+
+* `#define SETGATE(gate, istrap, sel, off, dpl)`
+
+其中`gate`是idt表的index入口，`istrap`判断是异常还是中断，`sel`为代码段选择符，`off`表示对应的处理函数地址，`dpl`表示触发该异常或中断的用户权限。
+
+```javascript
+void
+trap_init(void)
+{
+	extern struct Segdesc gdt[];
+
+		// LAB 3: Your code here.
+	void handler0();
+	void handler1();
+	void handler2();
+	void handler3();
+	void handler4();
+	void handler5();
+	void handler6();
+	void handler7();
+	void handler8();
+	void handler10();
+	void handler11();
+	void handler12();
+	void handler13();
+	void handler14();
+	void handler15();
+	void handler16();
+	void handler48();
+
+	SETGATE(idt[T_DIVIDE], 1, GD_KT, handler0, 0);
+	SETGATE(idt[T_DEBUG], 1, GD_KT, handler1, 0);
+	SETGATE(idt[T_NMI], 0, GD_KT, handler2, 0);
+
+	// T_BRKPT DPL 3
+	SETGATE(idt[T_BRKPT], 1, GD_KT, handler3, 3);
+
+	SETGATE(idt[T_OFLOW], 1, GD_KT, handler4, 0);
+	SETGATE(idt[T_BOUND], 1, GD_KT, handler5, 0);
+	SETGATE(idt[T_ILLOP], 1, GD_KT, handler6, 0);
+	SETGATE(idt[T_DEVICE], 1, GD_KT, handler7, 0);
+	SETGATE(idt[T_DBLFLT], 1, GD_KT, handler8, 0);
+	SETGATE(idt[T_TSS], 1, GD_KT, handler10, 0);
+	SETGATE(idt[T_SEGNP], 1, GD_KT, handler11, 0);
+	SETGATE(idt[T_STACK], 1, GD_KT, handler12, 0);
+	SETGATE(idt[T_GPFLT], 1, GD_KT, handler13, 0);
+	SETGATE(idt[T_PGFLT], 1, GD_KT, handler14, 0);
+	SETGATE(idt[T_FPERR], 1, GD_KT, handler16, 0);
+
+	// T_SYSCALL DPL 3
+	SETGATE(idt[T_SYSCALL], 0, GD_KT, handler48, 3);
+	// Per-CPU setup 
+	trap_init_percpu();
+}
+```
 
 
 

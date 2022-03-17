@@ -321,122 +321,114 @@ x86 使用0-31号中断向量作为处理器内部的同步的异常类型，比
 
 函数`env_pop_tf`接受一个指针，包含了和进程有关的信息。函数做了这些事情：
 
-将栈指针esp指向该进程指针的`env_tf`，然后将 `env_tf` 中存储的寄存器的值弹出到对应寄存器中，最后通过 `iret` 指令弹出栈中的元素分别到 EIP, CS, EFLAGS 到对应寄存器并跳转到 CS:EIP 存储的地址执行(当使用`iret`指令返回到一个不同特权级运行时，还会弹出堆栈段选择子及堆栈指针分别到SS与SP寄存器)，这样，相关寄存器都从内核设置成了用户程序对应的值，EIP存储的是程序入口地址。
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# 4.分页管理开启流程
-
-回到启动内核的函数`i386_init`函数(在*kern/init.c*中)，在初始化控制台后进行内存管理初始化，即`mem_init`函数，所以`mem_init`函数是我们这次练习的入口。在内核刚开始运行时就会调用`mem_init`函数(在*kern/pmap.c*中)，对整个操作系统的内存管理系统进行一些初始化的设置，比如设定页表等等操作。
-
-```JavaScript
-void
-mem_init(void)
+```javascript
+void env_pop_tf(struct Trapframe *tf)
 {
-	uint32_t cr0;
-	size_t n;
-
-	// Find out how much memory the machine has (npages & npages_basemem).
-	i386_detect_memory();
-
-	kern_pgdir = (pde_t *) boot_alloc(PGSIZE);
-	memset(kern_pgdir, 0, PGSIZE);
-
-	kern_pgdir[PDX(UVPT)] = PADDR(kern_pgdir) | PTE_U | PTE_P;
-
-	pages = (struct PageInfo *)boot_alloc(npages * sizeof(struct PageInfo));
-	memset(pages, 0, npages * sizeof(struct PageInfo));
-
-	page_init();
-
-	check_page_free_list(1);
-	check_page_alloc();
-	check_page();
-
-	check_kern_pgdir();
-
-
-	lcr3(PADDR(kern_pgdir));
-
-	check_page_free_list(0);
-
-
-	cr0 = rcr0();
-	cr0 |= CR0_PE|CR0_PG|CR0_AM|CR0_WP|CR0_NE|CR0_MP;
-	cr0 &= ~(CR0_TS|CR0_EM);
-	lcr0(cr0);
-
-	check_page_installed_pgdir();
+	asm volatile(
+		"\tmovl %0,%%esp\n"  // 将%esp指向tf地址处
+		"\tpopal\n"			 // 弹出Trapframe结构中的tf_regs值到通用寄存器
+		"\tpopl %%es\n"		 // 弹出Trapframe结构中的tf_es值到%es寄存器
+		"\tpopl %%ds\n"		 // 弹出Trapframe结构中的tf_ds值到%ds寄存器
+		"\taddl $0x8,%%esp\n" 
+		"\tiret\n"           //中断返回指令，具体动作如下：从Trapframe结构中依次弹出tf_eip,tf_cs,tf_eflags,tf_esp,tf_ss到相应寄存器
+		: : "g" (tf) : "memory"); //g是一个通用约束，可以表示使用通用寄存器、内存、立即数等任何一种处理方式
+	panic("iret failed");  
 }
 
+// trapframe结构
+struct Trapframe {
+	struct PushRegs tf_regs;
+	uint16_t tf_es;
+	uint16_t tf_padding1;
+	uint16_t tf_ds;
+	uint16_t tf_padding2;
+	uint32_t tf_trapno;
+	/* below here defined by x86 hardware */
+	uint32_t tf_err;
+	uintptr_t tf_eip;
+	uint16_t tf_cs;
+	uint16_t tf_padding3;
+	uint32_t tf_eflags;
+	/* below here only when crossing rings, such as from user to kernel */
+	uintptr_t tf_esp;
+	uint16_t tf_ss;
+	uint16_t tf_padding4;
+} __attribute__((packed));
+```
+关于这段程序我目前是这么理解的，在`env_create`函数中我们已经将所执行ELF文件的内容加载到了相应的内存空间中，同时装填好了该程序运行所需的`Trapframe`结构(`e->env_tf`)，所以在`env_pop_tf`函数中我们就将这个`trapframe`里面所存储的寄存器值按顺序装填到相应寄存器中，`iret`指令之后正式进入`user mode`，按照eip找到用户程序的第一条指令开始执行（EIP存储的是程序入口地址）。
+
+然后cpu开始执行`hello.c`程序，在`hello.c`程序中调用了系统函数`cprintf`，这个函数需要陷入到内核态执行，所以在`cprintf`中经过层层调用，最后调用到`syscall`，在`syscall`中`int $T_SYSCALL`后产生中断，陷入到内核态。
+
+```javascript
+// hello, world
+#include <inc/lib.h>
+
+void
+umain(int argc, char **argv)
+{
+	cprintf("hello, world\n");
+	cprintf("i am environment %08x\n", thisenv->env_id);
+}
 ```
 
-下面进入这个函数，首先这个函数调用 `i386_detect_memory` 子函数，这个子函数会调用硬件，检测现在系统中有多少可用的内存空间。然后初始化2个变量 `npages` 和 `npages_basemem`，前者表示的是整个物理内存空间的页数，后者表示的是 0x00000~0xA0000 这部分内存空间的页数。
+> ### int指令（软件中断指令）
+> INT（软件中断指令）是CALL指令的一种特殊形式。call指令调用调用的子程序是用户程序的一部分，而INT指令调用的操作系统提供的子程序或者其他特殊的子程序。
+> int指令后面一般接中断号。上面中的`int $T_SYSCALL`就是调用了`inc/trap.h`中的`T_SYSCALL`，这个中断号是48。
 
-接着执行的代码为：
+在`int $T_SYSCALL`后开始执行`trapentry.S`下的代码。应该首先跳转到`TRAPHANDLER_NOEC(handler48, T_SYSCALL)`处，再经过`_alltraps`，进入`trap`函数。
 
-```JavaScript
-	kern_pgdir = (pde_t *) boot_alloc(PGSIZE);
-	memset(kern_pgdir, 0, PGSIZE);
+在上面我们已经讲过，中断产生时，处理器已经自动压了一部分信息到栈上。
+
+```javascript
+     +--------------------+ KSTACKTOP             
+     | 0x00000 | old SS   |     " - 4 
+     |      old ESP       |     " - 8 
+     |     old EFLAGS     |     " - 12 
+     | 0x00000 | old CS   |     " - 16 
+     |      old EIP       |     " - 20 
+	 |    error code      |     " - 24 <---- ESP 
+     +--------------------+             
 ```
 
-其中`kern_pgdir`是一个指针，它是指向操作系统的页目录表的指针，操作系统之后工作在虚拟内存模式下时，就需要这个页目录表进行地址转换。我们为这个页目录表分配的内存大小空间为PGSIZE，即一个页的大小，并且首先把这部分内存清0。我们上面提到过，在JOS中，只用了一个页目录表，且一个页目录表的大小为 $1024 \times 4B = 4KB$(这个等式怎么来的？我们回顾一下页目录表和页表的组成，一个页目录表page directory包含1024个页目录项DIR ENTRY，而一个页目录项是一个4字节的变量)。
+联系`struct TrapFrame`的声明，可以看到，从最后一个元素，寄存器ss的值，到结构体的第8个声明的属性`uintptr_t tf_eip`，处理器都已经压好了。在进入`_alltraps`之前，前面的代码还处理好了`error code`和`trap number`，现在在`_alltraps`中仅剩`tf_ds`, `tf_es`, `tf_regs`需要处理。
 
-接着调用`boot_alloc`函数，这个函数是我们要首先实现的函数，在注释中有提到，它只是被用来暂时当做页分配器，之后我们使用的真实页分配器是`page_alloc`函数。而这个函数的核心思想就是维护一个静态变量`nextfree`，里面存放着下一个可以使用的空闲内存空间的**虚拟地址**，所以每次当我们想要分配n个字节的内存时，我们都需要修改这个变量的值。`nextfree` 的起始地址是紧挨着 Kernel Code 之后的一个页帧。执行完这两行代码后，内存布局变成了这样：
+现在我们看看`_alltraps`到底做了些什么：
 
-![avatar](./image/lab2内存使用情况.png)
+```javascript
+/*
+ * Lab 3: Your code here for _alltraps
+ */
+_alltraps:
+	pushl %ds
+	pushl %es
+	pushal
+	movw $GD_KD, %ax
+	movw %ax, %ds
+	movw %ax, %es
+	pushl %esp
+	call trap /*never return*/
 
-由于 Boot Loader 和 ELF header 占据的空间是可以重用的，所以我把它们标成了蓝色，`boot_alloc`函数的实现我们放在exercise中来讲。这里接着来看下一条命令：
-
-```JavaScript
-	kern_pgdir[PDX(UVPT)] = PADDR(kern_pgdir) | PTE_U | PTE_P;
+1:jmp 1b 
 ```
 
-这指令就是在为页目录表添加第一个页目录表项。通过查看*memlayout.h*文件，我们可以看到，`UVPT`的定义是一个虚拟地址(线性地址) 0xef400000，从这个虚拟地址开始，存放的就是这个操作系统的页表`kern_pgdir`，所以我们必须把这个虚拟地址和页表的物理地址映射起来，`PADDR(kern_pgdir)`就是在计算`kern_pgdir`所对应的真实物理地址。具体可看下图：
+首先是将ds和es压栈，而`struct PushRegs`结构体可以直接通过`popa`指令构造。`pusha`指令意为`push all registers`，将所有寄存器的值压栈，顺序正好对应`struct PushRegs`的声明顺序。
 
-![avatar](./image/first_entry.png)
+再接着将`GD_KD`的值赋值给寄存器ds, es，接着就可以调用`trap`函数了。`call`指令的前一个指令，就是将当前栈指针压栈了，就是在给`trap`函数传参。在文件`kern/trap.c`中的`trap`函数中，函数接受的参数`tf`，就是这样传进来的。
 
-下一条命令需要我们去补充，这条命令要完成的功能是分配一块内存，用来存放一个`struct PageInfo`的数组，数组中的每一个`PageInfo`代表内存当中的一页。操作系统内核就是通过这个数组来追踪所有内存页的使用情况的。
+再仔细看看`trap`函数及其调用的函数的行为。
 
-```JavaScript
-  	pages = (struct PageInfo *)boot_alloc(npages * sizeof(struct PageInfo));
-	memset(pages, 0, npages * sizeof(struct PageInfo));
-```
+进入`trap`函数后，先判断是否由用户态进入内核态，若是，则必须保存进程状态。也就是将刚刚得到的`TrapFrame`存到对应进程结构体的属性中，之后要恢复进程运行，就是从这个`TrapFrame`进行恢复。
 
-一个`PageInfo`的大小是 8B，所以执行完上述代码后，内存布局变成了下图：
+若中断令处理器从内核态切换到内核态，则不做特殊处理。
 
-![avatar](./image/lab2内存使用情况2.png)
+接着调用分配函数`trap_dispatch`，这个函数根据中断序号，调用相应的处理函数，并返回。故函数`trap_dispatch`返回之后，对中断的处理应当是已经完成了，该切换回触发中断的进程。修改函数`trap_dispatch`的代码时应注意，函数后部分不应该执行，否则会销毁当前进程`curenv`。中断处理函数返回后，`trap_dispatch`应及时返回。
 
-下一条指令我们将运行一个子函数`page_init()`，这个子函数的功能包括初始化`pages`数组和`pages_free_list`链表，这个链表中存放着所有空闲页的信息。我们可以到这个函数的定义处具体查看，整个函数是由一个循环构成，它会遍历所有内存页所对应的在`npages`数组中的`PageInfo`结构体，并且根据这个页当前的状态来修改这个结构体的状态，如果页已被占用，那么要把`PageInfo`结构体中的`pp_ref`属性置一；如果是空闲页，则要把这个页加入`pages_free_list`链表中。现在我们再来看一下我们内存的使用情况：
+切换回到旧进程，调用的是`env_run`，根据当前进程结构体`curenv`中包含和运行有关的信息，恢复进程执行。
 
-![avatar](./image/lab2内存使用情况3.png)
 
-红色块是已经使用的内存，所以在它们相对应的`PageInof`中的`pp_ref`需要置一，并且这些`PageInfo`也不会被添加到`pages_free_list`链表中；而蓝色块相对应的`PageInof`中的`pp_ref`为0，因为它们是可用内存，并且需要添加到`pages_free_list`链表中。`page_init()`将会在exercise篇中实现。
 
-初始化关于所有物理内存页的相关数据结构后，接下来的`check_page_free_list(1)`函数就是检查`page_free_list`链表的实现是否正确。`check_page_alloc()`用来检查`page_alloc()`和`page_free()`两个子函数是否能够正确运行，所以我们接下来要实现这两个子函数。
 
-`page_alloc()`函数功能是分配一个物理页，然后返回这个物理页所对应的`PageInfo`结构体。而`page_free()`函数的功能就是把一个页的`PageInfo`结构体插入回`page_free_list`空闲页链表，代表回收了这个页。两个函数将会在exercise篇中实现。
 
-至此，lab2的part1已经完成。
 
 
 
@@ -449,4 +441,5 @@ mem_init(void)
 2. https://blog.csdn.net/bysui/article/details/51533792
 3. https://github.com/Anarion-zuo/AnBlogs/blob/master/6.828/lab3A-elf.md
 4. https://github.com/shishujuan/mit6.828-2017/blob/lab3/kern/env.c
-5. 
+5. https://blog.csdn.net/a747979985/article/details/96435919
+6. 
