@@ -448,13 +448,95 @@ trap_init(void)
 
  因为当前的系统正在运行在用户态下，特权级为3，而INT指令为系统指令，特权级为0。特权级为3的程序不能直接调用特权级为0的程序，会引发一个`General Protection Exception`，即trap 13。
 
+# Exercise 5
 
+> Modify trap_dispatch() to dispatch page fault exceptions to page_fault_handler(). You should now be able to get make grade to succeed on the faultread, faultreadkernel, faultwrite, and faultwritekernel tests. If any of them don't work, figure out why and fix them. Remember that you can boot JOS into a particular user program using make run-x or make run-x-nox. For instance, make run-hello-nox runs the hello user program.
 
+`Trapframe` 中的 `tf_trapno` 成员代表这个中断的中断向量，所以在 `trap_dispatch` 函数中我们需要根据输入的 `Trapframe` 指针中的 `tf_trapno` 成员来判断到来的中断是否是缺页中断，如果是则执行 `page_fault_handler` 函数。
 
+```javascript
+static void
+trap_dispatch(struct Trapframe *tf)
+{
+	// Handle processor exceptions.
+	// LAB 3: Your code here.
+	if (tf->tf_trapno == T_PGFLT) {
+		return page_fault_handler(tf);
+	}
+	// Unexpected trap: The user process or the kernel has a bug.
+	print_trapframe(tf);
+	if (tf->tf_cs == GD_KT)
+		panic("unhandled trap in kernel");
+	else {
+		env_destroy(curenv);
+		return;
+	}
+}
+```
 
+修改完上面的代码后，你的lab应该可以通过`faultread`, `faultreadkernel`, `faultwrite`, 和 `faultwritekernel`四个test，如果没有通过的话，需要查看是不是之前的代码有错误。
 
+# Exercise 6
 
+> Modify `trap_dispatch()` to make breakpoint exceptions invoke the kernel monitor. You should now be able to get make grade to succeed on the breakpoint test.
 
+与上一个练习相似，这里我们需要把`breakpoint`异常引入到`monitor`函数中。
+
+```javascript
+static void
+trap_dispatch(struct Trapframe *tf)
+{
+	// Handle processor exceptions.
+	// LAB 3: Your code here.
+	if (tf->tf_trapno == T_PGFLT) {
+		return page_fault_handler(tf);
+	}
+
+	if (tf->tf_trapno == T_BRKPT) {
+		return monitor(tf);
+	}
+	// Unexpected trap: The user process or the kernel has a bug.
+	print_trapframe(tf);
+	if (tf->tf_cs == GD_KT)
+		panic("unhandled trap in kernel");
+	else {
+		env_destroy(curenv);
+		return;
+	}
+	
+}
+```
+
+## Challenge
+> Modify the JOS kernel monitor so that you can 'continue' execution from the current location (e.g., after the int3, if the kernel monitor was invoked via the breakpoint exception), and so that you can single-step one instruction at a time. You will need to understand certain bits of the EFLAGS register in order to implement single-stepping.
+> 
+> Optional: If you're feeling really adventurous, find some x86 disassembler source code - e.g., by ripping it out of QEMU, or out of GNU binutils, or just write it yourself - and extend the JOS kernel monitor to be able to disassemble and display instructions as you are stepping through them. Combined with the symbol table loading from lab 1, this is the stuff of which real kernel debuggers are made.
+
+留做
+
+## Questions
+
+> The break point test case will either generate a break point exception or a general protection fault depending on how you initialized the break point entry in the IDT (i.e., your call to `SETGATE` from `trap_init`). Why? How do you need to set it up in order to get the breakpoint exception to work as specified above and what incorrect setup would cause it to trigger a general protection fault?
+
+在设置IDT表中的`breakpoint exception`的表项时，如果我们把表项中的DPL字段设置为3，则会触发`breakpoint exception`，如果设置为0，则会触发`general protection exception`。DPL字段代表的含义是段描述符优先级（Descriptor Privileged Level DPL），如果我们想要当前执行的程序能够跳转到这个描述符所指向的程序那里继续执行的话，有个要求，就是要求当前运行程序的CPL，RPL的最大值需要小于等于异常处理函数的DPL，否则就会出现优先级低的代码试图去访问优先级高的代码的情况，就会触发`general protection exception`。那么我们的测试程序首先运行于用户态，它的CPL为3，当异常发生时，它希望去执行 int 3指令，这是一个系统级别的指令，用户态命令的CPL大于 int3 的DPL，所以就会触发`general protection exception`，但是如果把IDT这个表项的DPL设置为3时，就不会出现这样的现象了。
+
+> What do you think is the point of these mechanisms, particularly in light of what the `user/softint` test program does?
+
+`user/softint`的内容：
+
+```javascript
+// buggy program - causes an illegal software interrupt
+
+#include <inc/lib.h>
+
+void
+umain(int argc, char **argv)
+{
+	asm volatile("int $14");	// page fault
+}
+```
+
+这个程序的本意是想触发一个`page fault`，但是在实际运行时触发的却是`General Protection fault`，这是因为在设置IDT表中的`page fault`的表项时，如果我们把表项中的DPL字段设置为了0。所以重点应该是要把异常/中断的特权级别分清楚。
 
 
 

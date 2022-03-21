@@ -425,7 +425,53 @@ _alltraps:
 
 切换回到旧进程，调用的是`env_run`，根据当前进程结构体`curenv`中包含和运行有关的信息，恢复进程执行。
 
+# 3.系统调用
 
+在 JOS 中，使用 `int $0x30` 指令引起处理器中断完成系统调用。用户进程通过系统调用让内核为其完成一些功能，如打印输出cprintf，当内核执行完系统调用后，返回用户进程继续执行。
+
+注意系统调用的中断门描述符的DPL必须设置为3，允许用户调用。在int n这类软中断调用时会检查 CPL 和 DPL，只有当前的 CPL 比要调用的中断的 DPL值小或者相等才可以调用，否则就会产生`General Protection`。用户程序通过 `lib/syscall.c`触发系统调用，最终由`kern/trap.c`中的`trap_dispatch()`统一分发，并调用`kern/syscall.c`中的`syscall()`处理。其参数必须设置到寄存器中，其中系统调用号存储在%eax，其他参数依次存放到 %edx, %ecx, %ebx, %edi, 和%esi，返回值通过 %eax 来传递。
+
+> ## 关于CPL, RPL, DPL
+> CPL是当前正在执行的代码所在的段的特权级，存在于CS寄存器的低两位(对CS来说，选择子的RPL=当前段的CPL)。RPL指的是进程对段访问的请求权限，是针对段选择子而言的，不是固定的。DPL则是在段描述符中存储的，规定了段的访问级别，是固定的。为什么需要RPL呢？因为同一时刻只能有一个CPL，而低权限的用户程序去调用内核的功能来访问一个目标段时，进入内核代码段时CPL 变成了内核的CPL，如果没有RPL，那么权限检查的时候就会用CPL，而这个CPL 权限比用户程序权限高，也就可能去访问需要高权限才能访问的数据，导致安全问题。所以引入RPL，让它去代表访问权限，因此在检查CPL 的同时，也会检查RPL。一般来说如果RPL 的数字比CPL大(权限比CPL的低)，那么RPL会起决定性作用，这个权限检查是CPU硬件层面做的。
+
+> ```javascript
+>     用户进程                         内核         
+>   
+>     用户代码
+>	 CPL = 3                       
+>     系统调用     ------------->     内核代码
+>	 					            CPL = 0
+>						   引起系统的调用的用户进程 RPL = 3   ------------->   系统调用函数
+>						                                                     DPL = 3(对比RPL，允许调用)
+> ```
+
+关于上述系统调用的路径如下：
+
+```javascript
+start (kern/entry.S)
+i386_init (kern/init.c)
+    cons_init
+    mem_init
+    env_init
+    trap_init
+    env_create
+        env_alloc
+            env_setup_vm
+        load_icode
+            region_alloc
+    env_run
+        env_pop_tf (以上是part A的部分)
+		umain                                       hello.c
+			cprintf
+				syscall                             lib/syscall.c
+				_alltraps                           kern/trapentry.S
+					trap        				    kern/trap.c	
+						trap_dispatch
+							syscall         		kern/syscall.c
+```
+## 2.1 中断/异常概述
+
+## 2.2 中断/异常处理流程
 
 
 
@@ -442,4 +488,4 @@ _alltraps:
 3. https://github.com/Anarion-zuo/AnBlogs/blob/master/6.828/lab3A-elf.md
 4. https://github.com/shishujuan/mit6.828-2017/blob/lab3/kern/env.c
 5. https://blog.csdn.net/a747979985/article/details/96435919
-6. 
+6. https://blog.csdn.net/a747979985/article/details/96964676
