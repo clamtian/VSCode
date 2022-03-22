@@ -438,9 +438,9 @@ _alltraps:
 >     用户进程                         内核         
 >   
 >     用户代码
->	 CPL = 3                       
+>	  CPL = 3                       
 >     系统调用     ------------->     内核代码
->	 					            CPL = 0
+>	 					             CPL = 0
 >						   引起系统的调用的用户进程 RPL = 3   ------------->   系统调用函数
 >						                                                     DPL = 3(对比RPL，允许调用)
 > ```
@@ -461,17 +461,43 @@ i386_init (kern/init.c)
             region_alloc
     env_run
         env_pop_tf (以上是part A的部分)
-		umain                                       hello.c
-			cprintf
-				syscall                             lib/syscall.c
-				_alltraps                           kern/trapentry.S
-					trap        				    kern/trap.c	
-						trap_dispatch
-							syscall         		kern/syscall.c
+		entry.S                                             lib/entry.S
+			libmain                                         lib/libmain.c
+				umain                                       hello.c
+					cprintf
+						syscall                             lib/syscall.c
+						_alltraps                           kern/trapentry.S
+							trap        				    kern/trap.c	
+								trap_dispatch
+									syscall         		kern/syscall.c
 ```
-## 2.1 中断/异常概述
 
-## 2.2 中断/异常处理流程
+`lib/syscall.c`中的`syscall`函数里是一段汇编代码，结合下图我们具体来看一下：
+
+![avatar](./image/汇编.png)
+```javascript
+	asm volatile("int %1\n"
+		     : "=a" (ret)
+		     : "i" (T_SYSCALL),
+		       "a" (num),
+		       "d" (a1),
+		       "c" (a2),
+		       "b" (a3),
+		       "D" (a4),
+		       "S" (a5)
+		     : "cc", "memory");
+```
+
+上述代码的意思是将函数的参数设置到寄存器中(最多5个)，其中系统调用号存储在%eax，其他参数依次存放到 %edx, %ecx, %ebx, %edi, 和%esi，返回值通过 %eax 来传递。在`kern/trap.c` 中对`syscall()`的返回值要保存在Trapframe的`tf_regs.reg_eax`字段中，这样在返回用户程序执行时， `env_pop_tf`将reg_eax值弹出到 %eax寄存器中，从而实现了返回值传递。
+
+# 4.用户进程
+
+用户程序的入口在 `lib/entry.S`，在其中设置了 envs，pages，uvpt等全局变量以及`_start`符号。`_start`是整个程序的入口，链接器在链接时会查找目标文件中的`_start`符号代表的地址，把它设置为整个程序的入口地址，所以每个汇编程序都要提供一个`_start`符号并且用`.globl`声明。`entry.S`中会判断 USTACKTOP 和 寄存器esp的值是否相等，若相等，则表示没有参数，则会默认在用户栈中压入两个0，然后调用`libmain`函数。当然lab 3中的用户程序代码都没有传参数的。
+
+而`libmain()`则需要设置 `thisenv` 变量(因为测试的用户程序里面会引用`thisenv`的一些字段)，然后调用`umain`函数，而`umain`函数就是我们在 user/hello.c这些文件中定义的主函数。最后，执行完`umain`，会调用 `exit`退出。`exit`就是调用了系统调用 `sys_env_destroy`，最终内核通过 `env_destroy()`销毁用户进程并回到`monitor()`。
+
+内存保护可以确保用户进程中的bug不能破坏其他进程或者内核。当用户进程试图访问一个无效的或者没有权限的地址时，处理器就会中断进程并陷入到内核，若错误可修复，则内核就修复它并让用户进程继续执行；如果无法修复，那么用户进程就不能继续执行。许多系统调用接口运行把指针传给 kernel，这些指针指向用户buffer，为防止恶意用户程序破坏内核，内核需要对用户传递的指针进行权限检查。内存保护由 `user_mem_check()`和 `user_mem_assert()`实现。检查用户进程访存权限，并检查是否越界。
+
 
 
 
