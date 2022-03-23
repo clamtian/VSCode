@@ -538,57 +538,212 @@ umain(int argc, char **argv)
 
 这个程序的本意是想触发一个`page fault`，但是在实际运行时触发的却是`General Protection fault`，这是因为在设置IDT表中的`page fault`的表项时，如果我们把表项中的DPL字段设置为了0。所以重点应该是要把异常/中断的特权级别分清楚。
 
+# Exercise 7
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Exercise 4
-> In the file *kern/pmap.c*, you must implement code for the following functions.
+> Add a handler in the kernel for interrupt vector `T_SYSCALL`. You will have to edit `kern/trapentry.S` and `kern/trap.c`'s `trap_init()`. You also need to change `trap_dispatch()` to handle the system call interrupt by calling `syscall()` (defined in `kern/syscall.c`) with the appropriate arguments, and then arranging for the return value to be passed back to the user process in %eax. Finally, you need to implement `syscall()` in `kern/syscall.c`. Make sure `syscall()` returns `-E_INVAL` if the system call number is invalid. You should read and understand `lib/syscall.c` (especially the inline assembly routine) in order to confirm your understanding of the system call interface. Handle all the system calls listed in `inc/syscall.h` by invoking the corresponding kernel function for each call.
 >
-> `pgdir_walk()`
+> Run the `user/hello` program under your kernel (make `run-hello`). It should print "`hello, world`" on the console and then cause a page fault in user mode. If this does not happen, it probably means your system call handler isn't quite right. You should also now be able to get make grade to succeed on the testbss test.
+
+关于系统调用的流程我们已经在理论篇分析过了，这个exercise让我们实现`T_SYSCALL`这个中断，首先就要在 `kern/trapentry.S` 文件中为它声明它的中断处理函数，即`TRAPHANDLER_NOEC`，然后需要在`trap_init()` 函数中为它注册，这些我们在之前的exercise中已经做了。接下来在函数`trap_dispatch()`中对系统调用分发到`syscall()`函数，这里我们首先对`trap_dispatch()`函数进行修改：
+
+```javascript
+	...
+	if (tf->tf_trapno == T_SYSCALL) {
+		tf->tf_regs.reg_eax = syscall(
+			tf->tf_regs.reg_eax,
+			tf->tf_regs.reg_edx,
+			tf->tf_regs.reg_ecx,
+			tf->tf_regs.reg_ebx,
+			tf->tf_regs.reg_edi,
+			tf->tf_regs.reg_esi
+		);
+		return;
+	}
+	...
+```
+
+然后在`syscall()`函数中根据不同的系统调用序号，执行不同的函数：
+
+```javascript
+// Dispatches to the correct kernel function, passing the arguments.
+int32_t
+syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
+{
+	// Call the function corresponding to the 'syscallno' parameter.
+	// Return any appropriate return value.
+	// LAB 3: Your code here.
+	switch (syscallno) {
+		case SYS_cputs : 
+			sys_cputs((const char*)a1, a2);
+			return 0;
+		case SYS_cgetc : 
+			return sys_cgetc();
+		case SYS_getenvid : 
+			return sys_getenvid();
+		case SYS_env_destroy : 
+			return sys_env_destroy(a1);
+		default:
+			return -E_INVAL;
+	}
+}
+```
+
+## Challenge
+
+> Challenge! Implement system calls using the sysenter and sysexit instructions instead of using int 0x30 and iret.
+>
+> The sysenter/sysexit instructions were designed by Intel to be faster than int/iret. They do this by using registers instead of the stack and by making assumptions about how the segmentation registers are used. The exact details of these instructions can be found in Volume 2B of the Intel reference manuals.
 > 
-> `boot_map_region()`
->        
-> `page_lookup()`
->        
-> `page_remove()`
->        
-> `page_insert()`
->	
-> `check_page()`, called from `mem_init()`, tests your page table management routines. You should make sure it reports success before proceeding.
+> The easiest way to add support for these instructions in JOS is to add a sysenter_handler in kern/trapentry.S that saves enough information about the user environment to return to it, sets up the kernel environment, pushes the arguments to syscall() and calls syscall() directly. Once syscall() returns, set everything up for and execute the sysexit instruction. You will also need to add code to kern/init.c to set up the necessary model specific registers (MSRs). Section 6.1.2 in Volume 2 of the AMD Architecture Programmer's Manual and the reference on SYSENTER in Volume 2B of the Intel reference manuals give good descriptions of the relevant MSRs. You can find an implementation of wrmsr to add to inc/x86.h for writing to these MSRs here.
+> 
+> Finally, lib/syscall.c must be changed to support making a system call with sysenter. Here is a possible register layout for the sysenter instruction:
+> ```javascript
+>	eax                - syscall number
+>	edx, ecx, ebx, edi - arg1, arg2, arg3, arg4
+>	esi                - return pc
+>	ebp                - return esp
+>	esp                - trashed by sysenter
+> ```	
+> GCC's inline assembler will automatically save registers that you tell it to load values directly into. Don't forget to either save (push) and restore (pop) other registers that you clobber, or tell the inline assembler that you're clobbering them. The inline assembler doesn't support saving %ebp, so you will need to add code to save and restore it yourself. The return address can be put into %esi by using an instruction like leal after_sysenter_label, %%esi.
+>
+> Note that this only supports 4 arguments, so you will need to leave the old method of doing system calls around to support 5 argument system calls. Furthermore, because this fast path doesn't update the current environment's trap frame, it won't be suitable for some of the system calls we add in later labs.
+> 
+> You may have to revisit your code once we enable asynchronous interrupts in the next lab. Specifically, you'll need to enable interrupts when returning to the user process, which sysexit doesn't do for you.
+
+留做
+
+# Exercise 8
+
+> Add the required code to the user library, then boot your kernel. You should see `user/hello` print "`hello, world`" and then print "`i am environment 00001000`". `user/hello` then attempts to "exit" by calling `sys_env_destroy()` (see `lib/libmain.c` and `lib/exit.c`). Since the kernel currently only supports one user environment, it should report that it has destroyed the only environment and then drop into the kernel monitor. You should be able to get make grade to succeed on the hello test.
+
+获得当前正在运行的用户环境的 `env_id` , 以及这个用户环境所对应的 Env 结构体的指针。 `env_id` 我们可以通过调用 `sys_getenvid()` 这个函数来获得。Env 结构体的指针我们可以通过`env_id`来获得，`env_id`的值包含三部分，第31位被固定为0；第10~30这21位是标识符，标示这个用户环境；第0~9位代表这个用户环境所采用的 Env 结构体，在envs数组中的索引。所以我们只需知道 `env_id` 的0~9 位，我们就可以获得这个用户环境对应的 Env 结构体了。
+
+```javascript
+void
+libmain(int argc, char **argv)
+{
+	// set thisenv to point at our Env structure in envs[].
+	// LAB 3: Your code here.
+	thisenv = &envs[ENVX(sys_getenvid())];
+
+	// save the name of the program so that panic() can use it
+	if (argc > 0)
+		binaryname = argv[0];
+
+	// call user main routine
+	umain(argc, argv);
+
+	// exit gracefully
+	exit();
+}
+```
+
+# Exercise 9
+
+> Change `kern/trap.c` to panic if a page fault happens in kernel mode.
+>
+> Hint: to determine whether a fault happened in user mode or in kernel mode, check the low bits of the tf_cs.
+>
+> Read `user_mem_assert` in `kern/pmap.c` and implement `user_mem_check` in that same file.
+>
+> Change `kern/syscall.c` to sanity check arguments to system calls.
+>
+> Boot your kernel, running `user/buggyhello`. The environment should be destroyed, and the kernel should not panic. You should see:
+> ```javascript
+>	[00001000] user_mem_check assertion failure for va 00000001
+>	[00001000] free env 00001000
+>	Destroyed the only environment - nothing more to do!
+> ```	
+> Finally, change `debuginfo_eip` in `kern/kdebug.c` to call `user_mem_check` on usd, stabs, and stabstr. If you now run `user/breakpoint`, you should be able to run backtrace from the kernel monitor and see the backtrace traverse into `lib/libmain.c` before the kernel panics with a page fault. What causes this page fault? You don't need to fix it, but you should understand why it happens.
+
+当页面错误发生时，我们需要判断引起页面错误的代码是在内核中还是在用户程序中，根据 CS 段寄存器的低2位，这两位的名称叫做 CPL 位，表示当前运行的代码的访问权限级别，0代表是内核态，3代表是用户态。如果这个 `page fault` 是出现在内核中时，要把这个事件 `panic` 出来，所以我们把 `page_fault_handler` 文件修改如下：
+
+```javascript
+	...
+
+	// Handle kernel-mode page faults.
+
+	// LAB 3: Your code here.
+	if(!(tf->tf_cs && 0x01)) panic("kernel-mode page fault, fault address %d\n", fault_va);
+
+	...
+```
+
+接下来继续完善 `kern/pmap.c` 文件中的 `user_mem_check` 函数，通过观察 `user_mem_assert` 函数我们发现，它调用了 `user_mem_check` 函数。而 `user_mem_check` 函数的功能是检查一下当前用户态程序是否有对虚拟地址空间 [va, va+len] 的 `perm| PTE_P` 访问权限。搜易我们需要先找到这个虚拟地址范围对应于当前用户态程序的页表中的页表项，然后再去看一下这个页表项中有关访问权限的字段，是否包含 `perm | PTE_P`，只要有一个页表项是不包含的，就代表程序对这个范围的虚拟地址没有 `perm|PTE_P` 的访问权限。
+
+```javascript
+int
+user_mem_check(struct Env *env, const void *va, size_t len, int perm)
+{
+	// LAB 3: Your code here.
+
+	char *start, *end;
+	start = ROUNDDOWN((char *)va, PGSIZE);
+	end = ROUNDUP((char *)(va + len), PGSIZE);
+	pte_t *cur = NULL;
+
+	for(; start < end; start += PGSIZE){
+		cur = pgdir_walk(env->env_pgdir, start, 0);
+		if(!cur || (int)start >= ULIM || !(*cur & PTE_P) || ((int)*cur & perm) != perm){
+			user_mem_check_addr = (void *)start < va ? (uintptr_t)va : (uintptr_t)start;
+			return -E_FAULT;
+		}
+	}
+	return 0;
+}
+```
+
+我们还要补全 `kern/syscall.c` 文件中的 `sys_cputs` 函数，这个函数要求检查用户程序对虚拟地指空间 [s, s+len] 是否有访问权限:
+
+```javascript
+static void
+sys_cputs(const char *s, size_t len)
+{
+	// Check that the user has permission to read memory [s, s+len).
+	// Destroy the environment if not.
+	user_mem_assert(curenv, s, len, 0);
+	// LAB 3: Your code here.
+	// Print the string supplied by the user.
+	cprintf("%.*s", len, s);
+}
+```
+
+最后在`kern/kdebug`中修改`debuginfo_eip`函数，对用户空间的数据使用`user_mem_check()`函数检查当前用户空间是否对其有`PTE_U`权限。
+
+```javascript
+		...
+
+		// Make sure this memory is valid.
+		// Return -1 if it is not.  Hint: Call user_mem_check.
+		// LAB 3: Your code here.
+		if(user_mem_check(curenv, usd, sizeof(*usd), PTE_U) < 0) return -1;
+		
+		stabs = usd->stabs;
+		stab_end = usd->stab_end;
+		stabstr = usd->stabstr;
+		stabstr_end = usd->stabstr_end;
+
+		// Make sure the STABS and string table memory is valid.
+		// LAB 3: Your code here.
+		if(user_mem_check(curenv, stabs, sizeof(*stabs), PTE_U) < 0 || user_mem_check(curenv, stabstr, sizeof(*stabstr), PTE_U) < 0)
+			return -1;
+		
+		...
+```
+
+# Exercise 10
+
+> Boot your kernel, running `user/evilhello`. The environment should be destroyed, and the kernel should not panic. You should see:
+> ```javascript
+>	[00000000] new env 00001000
+>	...
+>	[00001000] user_mem_check assertion failure for va f010000c
+>	[00001000] free env 00001000
+> ```
+
+按照要求运行一下`user/evilhello`，如果出现上述信息，证明你这个lab做的是成功的。运行`make grade`可以打分，看看自己有没有错误的地方。
 
 
-# Exercise 5
-> Fill in the missing code in `mem_init()` after the call to `check_page()`.
-> Your code should now pass the `check_kern_pgdir()` and `check_page_installed_pgdir()` checks.
 
 
-## Question
 
-感谢[busui](https://blog.csdn.net/bysui/article/details/51471788)，题解大部分从他那里借鉴得来。
-
-> What entries (rows) in the page directory have been filled in at this point? What addresses do they map and where do they point? 
-
-> We have placed the kernel and user environment in the same address space. Why will user programs not be able to read or write the kernel's memory? What specific mechanisms protect the kernel memory?
-
-
-> What is the maximum amount of physical memory that this operating system can support? Why?
-
-
-> How much space overhead is there for managing memory, if we actually had the maximum amount of physical memory? How is this overhead broken down?
-
-> Revisit the page table setup in *kern/entry.S* and *kern/entrypgdir.c*. Immediately after we turn on paging, EIP is still a low number (a little over 1MB). At what point do we transition to running at an EIP above `KERNBASE`? What makes it possible for us to continue executing at a low EIP between when we enable paging and when we begin running at an EIP above `KERNBASE`? Why is this transition necessary?
