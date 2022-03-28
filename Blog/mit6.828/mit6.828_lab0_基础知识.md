@@ -4,7 +4,7 @@
 1. 运行操作系统
    * `make qume` 
    * `make qemu-nox` 无窗口
-   * 
+   * `make run-x` 运行x程序
 2. 调试操作系统
    * `make qemu-gdb` && `make gdb`
    * `si` 运行一步

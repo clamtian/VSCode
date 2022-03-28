@@ -503,15 +503,10 @@ i386_init (kern/init.c)
 
 
 
-
-
-
-
-
-
 1. https://www.jianshu.com/p/3d3d79abd5d1
 2. https://blog.csdn.net/bysui/article/details/51533792
 3. https://github.com/Anarion-zuo/AnBlogs/blob/master/6.828/lab3A-elf.md
 4. https://github.com/shishujuan/mit6.828-2017/blob/lab3/kern/env.c
 5. https://blog.csdn.net/a747979985/article/details/96435919
 6. https://blog.csdn.net/a747979985/article/details/96964676
+7. https://github.com/shishujuan/mit6.828-2017/blob/master/docs/lab3-exercize.md
