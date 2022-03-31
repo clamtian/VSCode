@@ -149,7 +149,15 @@ Unix提供了`fork()`系统调用作为其进程创建函数。`fork()`复制调
 
 在 `user/dumbfork.c`中有一个类似unix的`fork()`的实现，它使用了上面这几个系统调用运行了子进程，子进程拷贝了父进程的地址空间。父子进程交替切换，最后父进程在循环10次后退出，而子进程则是循环20次后退出。
 
-# 2.用户环境
+# 2.写时复制(Copy-on-Write Fork)
+
+如之前提到的，Unix提供了`fork()`系统调用作为其主要的进程创建原语。`fork()`系统调用将调用者进程(父进程)的地址空间复制到一个新创建的进程(子进程)。
+
+xv6 Unix 通过复制父进程物理页所有数据到分配给子进程的物理页。`dumbfork()`也是这么做的。将父地址空间复制到子地址空间是`fork()`操作中开销最大的部分。
+
+然而，很多时候我们fork一个子进程，接着是直接exec替换子进程的内存直接执行另一个程序，子进程在exec之前用到父进程的内存数据很少。这样的话，花在复制父进程地址空间的时间就是极大的浪费。
+
+出于这个原因，Unix的后续版本利用虚拟内存硬件，允许父进程和子进程共享映射到各自地址空间的内存，直到其中一个进程实际修改它。这种技术称为“copy-on-write”(写时复制)。为此，内核将在`fork()`上将地址空间映射从父节点复制到子节点，而不是将映射页面的内容复制到子节点，同时将当前共享的页面标记为read-only。当两个进程中的一个试图写入其中一个共享页面时，该进程将接受一个page fault。此时，Unix内核意识到页面实际上是一个“virtual”或“copy-on-write”副本，因此它为故障处理过程创建了一个新的、私有的、可写的页面副本。这样，单个页面的内容在实际写入之前不会被复制。这种优化使得`fork()`后面紧跟的子进程的`exec()`花销减少:子进程在调用`exec()`之前可能只需要复制一个页面(the current page of its stack)。
 
 ```JavaScript
 ```
@@ -239,3 +247,5 @@ Unix提供了`fork()`系统调用作为其进程创建函数。`fork()`复制调
 5. https://blog.csdn.net/a747979985/article/details/97513907
 6. https://blog.csdn.net/a747979985/article/details/97523753
 7. https://github.com/shishujuan/mit6.828-2017/blob/master/docs/lab4-exercize.md
+8. https://blog.csdn.net/a747979985/article/details/98308858
+9. https://blog.csdn.net/bysui/article/details/51842817
