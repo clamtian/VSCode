@@ -1,616 +1,421 @@
 # Exercise 1
-> Modify `mem_init()` in `kern/pmap.c` to allocate and map the envs array. This array consists of exactly NENV instances of the Env structure allocated much like how you allocated the pages array. Also like the pages array, the memory backing envs should also be mapped user read-only at UENVS (defined in `inc/memlayout.h`) so user processes can read from this array.
-
-> You should run your code and make sure `check_kern_pgdir()` succeeds.
-
-这个exercise要求我们给`NENV`个Env结构体在内存中分配空间，并将 envs 结构体的物理地址映射到 从 `UENV` 所指向的线性地址空间，该线性地址空间允许用户访问且只读，所以页面权限被标记为`PTE_U`。
+> Implement `mmio_map_region` in `kern/pmap.c`. To see how this is used, look at the beginning of `lapic_init` in `kern/lapic.c`. You'll have to do the next exercise, too, before the tests for `mmio_map_region` will run.
 
 ```Javascript
-void
-mem_init(void)
+void *
+mmio_map_region(physaddr_t pa, size_t size)
 {
-	...
+	static uintptr_t base = MMIOBASE;
 
-	pages = (struct PageInfo *)boot_alloc(npages * sizeof(struct PageInfo));
-	memset(pages, 0, npages * sizeof(struct PageInfo));
-	
-	/***********************************************************************************/
-	envs = (struct Env *)boot_alloc(NENV * sizeof(struct Env));
-	memset(envs, 0, NENV * sizeof(struct Env));
-	/***********************************************************************************/
-
-	...
-
-	boot_map_region(kern_pgdir, UPAGES, PTSIZE, PADDR(pages), PTE_U);
-
-	/***********************************************************************************/
-	boot_map_region(kern_pgdir, UENVS, PTSIZE, PADDR(envs), PTE_U);
-	/***********************************************************************************/
-	
-	...
+	physaddr_t pa_begin = ROUNDDOWN(pa, PGSIZE);
+	physaddr_t pa_end = ROUNDUP(pa + size, PGSIZE);
+	if (pa_end - pa_begin >= MMIOLIM - MMIOBASE) {
+	    panic("mmio_map_region: requesting size too large.\n");
+	}
+	size = pa_end - pa_begin;
+	boot_map_region(kern_pgdir, base, size, pa_begin, PTE_W | PTE_PCD | PTE_PWT);
+	void *ret = (void *)base;
+	base += size;
+	return ret;
 }
 ```
 
 # Exercise 2
-> In the file env.c, finish coding the following functions:
->
-> `env_init()`
-> 
-> Initialize all of the Env structures in the envs array and add them to the env_free_list. Also calls env_init_percpu, which configures the segmentation hardware with separate segments for privilege level 0 (kernel) and privilege level 3 (user).
-> 
-> `env_setup_vm()`
->
->Allocate a page directory for a new environment and initialize the kernel portion of the new environment's address space.
->
-> `region_alloc()`
-> 
-> Allocates and maps physical memory for an environment
-> 
-> `load_icode()`
-> 
-> You will need to parse an ELF binary image, much like the boot loader already does, and load its contents into the user address space of a new environment.
-> 
-> `env_create()`
-> 
->Allocate an environment with env_alloc and call load_icode to load an ELF binary into it.
->
-> `env_run()`
-> 
-> Start a given environment running in user mode.
-> 
-> As you write these functions, you might find the new cprintf verb %e useful -- it prints a description corresponding to an error code. For example,
-> ```JAvaScript
-> r = -E_NO_MEM;
-> panic("env_alloc: %e", r);
-> ```
-> 	
-> will panic with the message "env_alloc: out of memory".
+> Read `boot_aps()` and `mp_main()` in `kern/init.c`, and the assembly code in `kern/mpentry.S`. Make sure you understand the control flow transfer during the bootstrap of APs. Then modify your implementation of `page_init()` in `kern/pmap.c` to avoid adding the page at `MPENTRY_PADDR` to the free list, so that we can safely copy and run AP bootstrap code at that physical address. Your code should pass the updated `check_page_free_list()` test (but might fail the updated `check_kern_pgdir()` test, which we will fix soon).
 
-这个exercise要求我们实现几个与用户进程运行相关的函数。
+修改 `kern/pmap.c`中的`page_init()`使其不要将 `MPENTRY_PADDR`(0x7000)这一页加入到`page_free_list`。
 
-## `env_init()`
-
-`env_init()`函数很简单，就是遍历 `envs` 数组中的所有 Env 结构体，把每一个结构体的 `env_id` 字段置0，因为要求所有的 Env 在 `env_free_list` 中的顺序，要和它在 `envs` 中的顺序一致，所以需要采用头插法。　
-
-```JavaScript
+```javaScript
 void
-env_init(void)
+page_init(void)
 {
-	env_free_list = NULL;
-	for(int i = NENV - 1; i >= 0; --i){
-		envs[i].env_id = 0;
-		envs[i].env_status = ENV_FREE;
-		envs[i].env_link = env_free_list;
+	size_t i;
+	page_free_list = NULL;
+	pages[0].pp_ref = 1;
+	pages[0].pp_link = NULL;
+	size_t index_IOhole_begin = npages_basemem;
+	size_t index_alloc_end = PADDR(boot_alloc(0)) / PGSIZE;
 
-		env_free_list = &envs[i];
-	}
-	// Per-CPU part of the initialization
-	env_init_percpu();
-}
-```
-
-## `env_setup_vm()`
-
-`env_setup_vm()` 函数主要是初始化新的用户环境的页目录表，不过只设置页目录表中和操作系统内核跟内核相关的页目录项，用户环境的页目录项不要设置，因为所有用户环境的页目录表中和操作系统相关的页目录项都是一样的（除了虚拟地址UVPT，这个也会单独进行设置），所以我们可以参照 `kern_pgdir` 中的内容来设置 `env_pgdir` 中的内容。
-
-```JavaScript
-static int
-env_setup_vm(struct Env *e)
-{
-	int i;
-	struct PageInfo *p = NULL;
-
-	// Allocate a page for the page directory
-	if (!(p = page_alloc(ALLOC_ZERO)))
-		return -E_NO_MEM;
-
-	// LAB 3: Your code here.
-	e->env_pgdir = (pde_t *) page2kva(p);
-	p->pp_ref++;
-	memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
-
-	for (i = 0; i < PDX(UTOP); ++i) {
-        e->env_pgdir[i] |= PTE_W | PTE_U;
-    }
-
-	// UVPT maps the env's own page table read-only.
-	// Permissions: kernel R, user R
-	e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
-	return 0;
-}
-
-```
-
-## `region_alloc()`
-
-`region_alloc()` 为用户环境分配物理空间，这里注意我们要先把起始地址和终止地址进行页对齐，对其之后我们就可以以页为单位，为其一个页一个页的分配内存，并且修改页目录表和页表。
-
-```JavaScript
-static void
-region_alloc(struct Env *e, void *va, size_t len)
-{
-	void* start = (void *)ROUNDDOWN((uint32_t)va, PGSIZE);
-    void* end = (void *)ROUNDUP((uint32_t)va+len, PGSIZE);
-    struct PageInfo *p = NULL;
-    void* i;
-    int r;
-
-    for(i = start; i < end; i += PGSIZE){
-        p = page_alloc(0);
-        if(p == NULL)
-           panic(" region alloc failed: allocation failed.\n");
-
-        r = page_insert(e->env_pgdir, p, i, PTE_W | PTE_U);
-        if(r != 0)
-            panic("region alloc failed.\n");
-    }
-}
-```
-
-## `load_icode()`
-
-`load_icode()` 功能是为每一个用户进程设置它的初始代码区，堆栈以及处理器标识位。每个用户程序都是ELF文件，所以我们要解析该ELF文件。
-
-```JavaScript
-static void
-load_icode(struct Env *e, uint8_t *binary)
-{
-	struct Proghdr *ph, *eph;
-	struct Elf *elf = (struct Elf*)binary;
-	
-	if(elf->e_magic != ELF_MAGIC) 
-		panic("There is something wrong in load _icode function!\n");
-	
-	ph = (struct Proghdr *) ((uint8_t *) elf + elf->e_phoff);
-	eph = ph + elf->e_phnum;
-
-	lcr3(PADDR(e->env_pgdir));   //load user pgdir
-	
-	for(; ph < eph; ph++) {
-		if(ph->p_type == ELF_PROG_LOAD){
-			region_alloc(e, (void *)ph->p_va, ph->p_memsz);
-			memmove((void *)ph->p_va, (void *)(binary + ph->p_offset), ph->p_filesz);
-			memset((void *)(ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
+	for (i = 1; i < npages; i++) {
+		if((i >= index_IOhole_begin && i < index_alloc_end) || (i == MPENTRY_PADDR / PGSIZE)){
+			pages[i].pp_ref = 1;
+			pages[i].pp_link = NULL;
+		}else{
+			pages[i].pp_ref = 0;
+			pages[i].pp_link = page_free_list;
+			page_free_list = &pages[i];
 		}
 	}
-	e->env_tf.tf_eip = elf->e_entry;
-	lcr3(PADDR(kern_pgdir));  
-
-	region_alloc(e, (void *)(USTACKTOP - PGSIZE), PGSIZE);
 }
 ```
 
-## `env_create()`
+## Question
 
-`env_create()` 是利用`env_alloc()`函数和`load_icode()`函数，加载一个ELF文件到用户环境中
+> Compare `kern/mpentry.S` side by side with `boot/boot.S`. Bearing in mind that `kern/mpentry.S` is compiled and linked to run above `KERNBASE` just like everything else in the kernel, what is the purpose of macro `MPBOOTPHYS`? Why is it necessary in `kern/mpentry.S` but not in `boot/boot.S`? In other words, what could go wrong if it were omitted in `kern/mpentry.S`?
+>
+> Hint: recall the differences between the link address and the load address that we have discussed in Lab 1.
 
-```JavaScript
-void
-env_create(uint8_t *binary, enum EnvType type)
-{
-	struct Env *e;
-	int res = env_alloc(&e, 0);
-	if(res < 0) panic("load 1st env failed!\n");
-	e->env_type = type;
-	load_icode(e, binary);
-}
-```
-
-## `env_run()`
-
-`env_run()` 是真正开始运行一个用户环境，注意在运行用户进程之前需要将页目录表切换成用户的。
-
-```JavaScript
-void
-env_run(struct Env *e)
-{
-	if(curenv && curenv->env_status == ENV_RUNNABLE){
-		curenv->env_status = ENV_RUNNABLE;
-	}
-	curenv = e;
-	curenv->env_status = ENV_RUNNING;
-	++curenv->env_runs;
-
-	lcr3(PADDR(curenv->env_pgdir));
-
-	env_pop_tf(&(curenv->env_tf));
-}
-```
+ 这是因为`mpentry.S`代码中`mpentry_start`和`mpentry_end`的地址都在`KERNBASE`(0xf0000000）之上，实模式无法寻址，而我们将`mpentry.S`加载到了0x7000处，所以需要通过`MPBOOTPHYS`来寻址。而`boot.S`加载的位置本身就是实模式可寻址的低地址，所以不用额外转换。
 
 # Exercise 3
 
-> Read Chapter 9, Exceptions and Interrupts in the 80386 Programmer's Manual (or Chapter 5 of the IA-32 Developer's Manual), if you haven't already.
+> Modify `mem_init_mp()` (in `kern/pmap.c`) to map per-CPU stacks starting at `KSTACKTOP`, as shown in `inc/memlayout.h`. The size of each stack is `KSTKSIZE` bytes plus `KSTKGAP` bytes of unmapped guard pages. Your code should pass the new check in `check_kern_pgdir()`.
 
-这个exercise是让我们阅读一些关于中断和异常的资料，建议可以看一看，如果阅读英文比较吃力的话，可以去找一些博客来看。
+修改 `mem_mp_init()`为每个cpu分配内核栈。注意，CPU内核栈之间有空白`KSTKGAP`(32KB)，其目的是为了避免一个CPU的内核栈覆盖另外一个CPU的内核栈，空出来这部分可以在栈溢出时报错。
+
+```javascript
+static void
+mem_init_mp(void)
+{
+	int i;
+	for(i = 0; i < NCPU; ++i){
+		uintptr_t kstacktop_i = KSTACKTOP - i * (KSTKSIZE + KSTKGAP);
+		boot_map_region(kern_pgdir, 
+						kstacktop_i - KSTKSIZE, 
+						KSTKSIZE, 
+						(physaddr_t)PADDR(&percpu_kstacks[i]), 
+						PTE_P | PTE_W);
+	}
+}
+```
 
 # Exercise 4
 
-> Edit `trapentry.S` and `trap.c` and implement the features described above. The macros `TRAPHANDLER` and `TRAPHANDLER_NOEC` in `trapentry.S` should help you, as well as the `T_*` defines in `inc/trap.h`. You will need to add an entry point in `trapentry.S` (using those macros) for each trap defined in `inc/trap.h`, and you'll have to provide `_alltraps` which the `TRAPHANDLER` macros refer to. You will also need to modify `trap_init()` to initialize the idt to point to each of these entry points defined in `trapentry.S`; the SETGATE macro will be helpful here.
->
-> Your `_alltraps` should:
->
-> * push values to make the stack look like a struct Trapframe
-> * load GD_KD into %ds and %es
-> * pushl %esp to pass a pointer to the Trapframe as an argument to trap()
-> * call trap (can trap ever return?)
-> * Consider using the pushal instruction; it fits nicely with the layout of the struct Trapframe.
->
-> Test your trap handling code using some of the test programs in the user directory that cause exceptions before making any system calls, such as user/divzero. You should be able to get make grade to succeed on the divzero, softint, and badsegment tests at this point.
+> The code in `trap_init_percpu()` (`kern/trap.c`) initializes the TSS and TSS descriptor for the BSP. It worked in Lab 3, but is incorrect when running on other CPUs. Change the code so that it can work on all CPUs. (Note: your new code should not use the global ts variable any more.)
 
-首先看一下 `trapentry.S` 文件，里面定义了两个宏定义，`TRAPHANDLER`和`TRAPHANDLER_NOEC`。他们的功能从汇编代码中可以看出：声明了一个全局符号`name`，并且这个符号是函数类型的，代表它是一个中断处理函数名。其实这里就是两个宏定义的函数。这两个函数就是当系统检测到一个中断/异常时，需要首先完成的一部分操作，包括：中断异常码，中断错误码(error code)。正是因为有些中断有中断错误码，有些没有，所以我们采用了两个宏定义函数。
-
-```javascript
-#define TRAPHANDLER(name, num)						\
-	.globl name;		/* define global symbol for 'name' */	\
-	.type name, @function;	/* symbol type is function */		\
-	.align 2;		/* align function definition */		\
-	name:			/* function starts here */		\
-	pushl $(num);							\
-	jmp _alltraps
-
-/* Use TRAPHANDLER_NOEC for traps where the CPU doesn't push an error code.
- * It pushes a 0 in place of the error code, so the trap frame has the same
- * format in either case.
- */
-#define TRAPHANDLER_NOEC(name, num)					\
-	.globl name;							\
-	.type name, @function;						\
-	.align 2;							\
-	name:								\
-	pushl $0;							\
-	pushl $(num);							\
-	jmp _alltraps
-
-.text
-
-/*
- * Lab 3: Your code here for generating entry points for the different traps.
- */
- 
-TRAPHANDLER_NOEC(handler0, T_DIVIDE)
-TRAPHANDLER_NOEC(handler1, T_DEBUG)
-TRAPHANDLER_NOEC(handler2, T_NMI)
-TRAPHANDLER_NOEC(handler3, T_BRKPT)
-TRAPHANDLER_NOEC(handler4, T_OFLOW)
-TRAPHANDLER_NOEC(handler5, T_BOUND)
-TRAPHANDLER_NOEC(handler6, T_ILLOP)
-TRAPHANDLER(handler7, T_DEVICE)
-TRAPHANDLER_NOEC(handler8, T_DBLFLT)
-TRAPHANDLER(handler10, T_TSS)
-TRAPHANDLER(handler11, T_SEGNP)
-TRAPHANDLER(handler12, T_STACK)
-TRAPHANDLER(handler13, T_GPFLT)
-TRAPHANDLER(handler14, T_PGFLT)
-TRAPHANDLER_NOEC(handler16, T_FPERR)
-TRAPHANDLER_NOEC(handler48, T_SYSCALL)
-```
-
-然后就会调用 `_alltraps`，`_alltraps`函数其实就是为了能够让程序在之后调用`trap.c`中的`trap`函数时，能够正确的访问到输入的参数，即`Trapframe`指针类型的输入参数`tf`。
-
-```javascript
-/*
- * Lab 3: Your code here for _alltraps
- */
-_alltraps:
-	pushl %ds
-	pushl %es
-	pushal
-	movw $GD_KD, %ax
-	movw %ax, %ds
-	movw %ax, %es
-	pushl %esp
-	call trap /*never return*/
-
-1:jmp 1b
-```
-
-最后在`trap.c`中实现`trap_init`函数，即在idt表中插入中断向量描述符，可以使用`SETGATE`宏实现：
-
-`SETGATE`宏的定义：
-
-* `#define SETGATE(gate, istrap, sel, off, dpl)`
-
-其中`gate`是idt表的index入口，`istrap`判断是异常还是中断，`sel`为代码段选择符，`off`表示对应的处理函数地址，`dpl`表示触发该异常或中断的用户权限。
+修改`trap_init_percpu()`，完成每个CPU的TSS初始化。设置ts_esp0和ts_ss0，注意，设置全局描述符的时候加上cpu_id作为索引值，ltr时要注意是加载的描述符的偏移值，所以记得cpu_id<<3。
 
 ```javascript
 void
-trap_init(void)
+trap_init_percpu(void)
 {
-	extern struct Segdesc gdt[];
+	int id = thiscpu->cpu_id;
+	thiscpu->cpu_ts.ts_esp0 = KSTACKTOP - (KSTKSIZE + KSTKGAP) * id;
+	thiscpu->cpu_ts.ts_ss0 = GD_KD;
+	thiscpu->cpu_ts.ts_iomb = sizeof(struct Taskstate);
 
-		// LAB 3: Your code here.
-	void handler0();
-	void handler1();
-	void handler2();
-	void handler3();
-	void handler4();
-	void handler5();
-	void handler6();
-	void handler7();
-	void handler8();
-	void handler10();
-	void handler11();
-	void handler12();
-	void handler13();
-	void handler14();
-	void handler15();
-	void handler16();
-	void handler48();
+	gdt[(GD_TSS0 >> 3) + id] = SEG16(STS_T32A, (uint32_t) (&thiscpu->cpu_ts),
+					sizeof(struct Taskstate) - 1, 0);
+	gdt[(GD_TSS0 >> 3) + id].sd_s = 0;
+	ltr(GD_TSS0 + (id << 3));
 
-	SETGATE(idt[T_DIVIDE], 1, GD_KT, handler0, 0);
-	SETGATE(idt[T_DEBUG], 1, GD_KT, handler1, 0);
-	SETGATE(idt[T_NMI], 0, GD_KT, handler2, 0);
-
-	// T_BRKPT DPL 3
-	SETGATE(idt[T_BRKPT], 1, GD_KT, handler3, 3);
-
-	SETGATE(idt[T_OFLOW], 1, GD_KT, handler4, 0);
-	SETGATE(idt[T_BOUND], 1, GD_KT, handler5, 0);
-	SETGATE(idt[T_ILLOP], 1, GD_KT, handler6, 0);
-	SETGATE(idt[T_DEVICE], 1, GD_KT, handler7, 0);
-	SETGATE(idt[T_DBLFLT], 1, GD_KT, handler8, 0);
-	SETGATE(idt[T_TSS], 1, GD_KT, handler10, 0);
-	SETGATE(idt[T_SEGNP], 1, GD_KT, handler11, 0);
-	SETGATE(idt[T_STACK], 1, GD_KT, handler12, 0);
-	SETGATE(idt[T_GPFLT], 1, GD_KT, handler13, 0);
-	SETGATE(idt[T_PGFLT], 1, GD_KT, handler14, 0);
-	SETGATE(idt[T_FPERR], 1, GD_KT, handler16, 0);
-
-	// T_SYSCALL DPL 3
-	SETGATE(idt[T_SYSCALL], 0, GD_KT, handler48, 3);
-	// Per-CPU setup 
-	trap_init_percpu();
+	lidt(&idt_pd);
 }
 ```
-
-## Challenge
-> Challenge! You probably have a lot of very similar code right now, between the lists of `TRAPHANDLER` in `trapentry.S` and their installations in `trap.c`. Clean this up. Change the macros in `trapentry.S` to automatically generate a table for `trap.c` to use. Note that you can switch between laying down code and data in the assembler by using the directives `.text` and `.data`.
-
-这块是让我们对`trapentry.S`中的代码进行重构，提高代码利用率。
-
-宏定义修改：
-
-```javascript
-* Use ec = 1 for traps where the CPU automatically push an error code and ec = 0 for not.
- * Use user = 1 for a syscall; user = 0 for a normal trap.
- */
-#define TRAPHANDLER(name, num, ec, user)      \
-.text;                                        \
-        .globl name;            /* define global symbol for 'name' */   \
-        .type name, @function;  /* symbol type is function */           \
-        .align 2;               /* align function definition */         \
-        name:                   /* function starts here */              \
-        .if ec==0;                                                      \
-                pushl $0;                                               \
-        .endif;                                                         \
-        pushl $(num);                                                   \
-        jmp _alltraps;                                                  \
-.data;                                                                  \
-        .long  name, num, user
-```
-
-修改`TRAPHANDLER`宏定义整合代码，在定义函数的同时(`.text`)定义相应的数据(`.data`)，然后定义1个全局数组，利用前面定义的宏实现该数组的填充。
-
-```javascript
-data
-        .globl  entry_data
-        entry_data:
-.text
-TRAPHANDLER(divide_entry, T_DIVIDE, 0, 0);
-TRAPHANDLER(debug_entry, T_DEBUG, 0, 0);
-TRAPHANDLER(nmi_entry, T_NMI, 0, 0);
-TRAPHANDLER(brkpt_entry, T_BRKPT, 0, 1);
-TRAPHANDLER(oflow_entry, T_OFLOW, 0, 0);
-TRAPHANDLER(bound_entry, T_BOUND, 0, 0);
-TRAPHANDLER(illop_entry, T_ILLOP, 0, 0);
-TRAPHANDLER(device_entry, T_DEVICE, 0, 0);      
-TRAPHANDLER(dblflt_entry, T_DBLFLT, 1, 0);
-TRAPHANDLER(tts_entry, T_TSS, 1, 0);
-TRAPHANDLER(segnp_entry, T_SEGNP, 1, 0);
-TRAPHANDLER(stack_entry, T_STACK, 1, 0);
-TRAPHANDLER(gpflt_entry, T_GPFLT, 1, 0);
-TRAPHANDLER(pgflt_entry, T_PGFLT, 1, 0);
-TRAPHANDLER(fperr_entry, T_FPERR, 0, 0);
-TRAPHANDLER(align_entry, T_ALIGN, 1, 0);
-TRAPHANDLER(mchk_entry, T_MCHK, 0, 0);
-TRAPHANDLER(simderr_entry, T_SIMDERR, 0, 0);
-TRAPHANDLER(syscall_entry, T_SYSCALL, 0, 1);
-.data
-        .long 0, 0, 0   // interupt end identify
-```
-
-最后在`trap_init`函数中就可以使用该全局数组对idt进行初始化。
-
-```javascript
-void
-trap_init(void)
-{
-        extern struct Segdesc gdt[];
-        extern long entry_data[][3];
-        int i;
-
-        for (i = 0; entry_data[i][0] != 0; i++ )
-                SETGATE(idt[entry_data[i][1]], 0, GD_KT, entry_data[i][0], entry_data[i][2]*3);
-
-        trap_init_percpu();
-}
-```
-
-## Questions
-
-> Answer the following questions in your answers-lab3.txt:
-> 
-> What is the purpose of having an individual handler function for each exception/interrupt? (i.e., if all exceptions/interrupts were delivered to the same handler, what feature that exists in the current implementation could not be provided?)
-
-不同的中断或者异常需要不同的中断处理函数，因为不同的异常/中断需要不同的处理方式，比如有些异常是代表指令有错误，那么不会返回被中断的命令。而有些中断可能只是为了处理外部IO事件，此时执行完中断函数还要返回到被中断的程序中继续运行。
-
-> Did you have to do anything to make the user/softint program behave correctly? The grade script expects it to produce a general protection fault (trap 13), but softint's code says int $14. Why should this produce interrupt vector 13? What happens if the kernel actually allows softint's int $14 instruction to invoke the kernel's page fault handler (which is interrupt vector 14)?
-
- 因为当前的系统正在运行在用户态下，特权级为3，而INT指令为系统指令，特权级为0。特权级为3的程序不能直接调用特权级为0的程序，会引发一个`General Protection Exception`，即trap 13。
 
 # Exercise 5
 
-> Modify trap_dispatch() to dispatch page fault exceptions to page_fault_handler(). You should now be able to get make grade to succeed on the faultread, faultreadkernel, faultwrite, and faultwritekernel tests. If any of them don't work, figure out why and fix them. Remember that you can boot JOS into a particular user program using make run-x or make run-x-nox. For instance, make run-hello-nox runs the hello user program.
-
-`Trapframe` 中的 `tf_trapno` 成员代表这个中断的中断向量，所以在 `trap_dispatch` 函数中我们需要根据输入的 `Trapframe` 指针中的 `tf_trapno` 成员来判断到来的中断是否是缺页中断，如果是则执行 `page_fault_handler` 函数。
+> Apply the big kernel lock as described above, by calling `lock_kernel()` and `unlock_kernel()` at the proper locations.
 
 ```javascript
-static void
-trap_dispatch(struct Trapframe *tf)
-{
-	// Handle processor exceptions.
-	// LAB 3: Your code here.
-	if (tf->tf_trapno == T_PGFLT) {
-		return page_fault_handler(tf);
-	}
-	// Unexpected trap: The user process or the kernel has a bug.
-	print_trapframe(tf);
-	if (tf->tf_cs == GD_KT)
-		panic("unhandled trap in kernel");
-	else {
-		env_destroy(curenv);
-		return;
-	}
-}
+// 加锁位置1 i386_init()的 boot_aps()函数前。
+	...
+
+    lock_kernel();
+ 
+    // Starting non-boot CPUs
+    boot_aps();
+
+	...
+
+// 加锁位置2 mp_main()的函数末尾，这里还要加上 sched_yield()。
+	...
+
+    lock_kernel();
+	sched_yield();
+
+	...
+
+// 加锁位置3 trap()里面
+	...
+
+    lock_kernel();
+    assert(curenv);
+    
+	...            
+// 释放锁
+	...
+
+    lcr3(PADDR(curenv->env_pgdir));
+    unlock_kernel();
+    env_pop_tf(&curenv->env_tf);
+
+	...
 ```
 
-修改完上面的代码后，你的lab应该可以通过`faultread`, `faultreadkernel`, `faultwrite`, 和 `faultwritekernel`四个test，如果没有通过的话，需要查看是不是之前的代码有错误。
+## Question
+
+> It seems that using the big kernel lock guarantees that only one CPU can run the kernel code at a time. Why do we still need separate kernel stacks for each CPU? Describe a scenario in which using a shared kernel stack will go wrong, even with the protection of the big kernel lock.
+
+这是因为虽然内核锁限制了多个进程同时执行内核代码，但是在陷入`trap()`之前，CPU硬件已经自动压栈了SS, ESP, EFLAGS, CS, EIP等寄存器内容，而且在`trapentry.S`中也压入了错误码和中断号到内核栈中，所以不同CPU必须分开内核栈，否则多个CPU同时陷入内核时会破坏栈结构，此时都还没有进入到`trap()`的加内核锁位置。
+
+## Challenge
+
+> The big kernel lock is simple and easy to use. Nevertheless, it eliminates all concurrency in kernel mode. Most modern operating systems use different locks to protect different parts of their shared state, an approach called fine-grained locking. Fine-grained locking can increase performance significantly, but is more difficult to implement and error-prone. If you are brave enough, drop the big kernel lock and embrace concurrency in JOS!
+> 
+> It is up to you to decide the locking granularity (the amount of data that a lock protects). As a hint, you may consider using spin locks to ensure exclusive access to these shared components in the JOS kernel:
+>
+> * The page allocator.
+> * The console driver.
+> * The scheduler.
+> * The inter-process communication (IPC) state that you will implement in the part C.
+
+留做
 
 # Exercise 6
 
-> Modify `trap_dispatch()` to make breakpoint exceptions invoke the kernel monitor. You should now be able to get make grade to succeed on the breakpoint test.
+> Implement round-robin scheduling in `sched_yield()` as described above. Don't forget to modify `syscall()` to dispatch `sys_yield()`.
+> 
+> Make sure to invoke `sched_yield()` in mp_main.
+> 
+> Modify `kern/init.c` to create three (or more!) environments that all run the program `user/yield.c`.
+> 
+> Run make qemu. You should see the environments switch back and forth between each other five times before terminating, like below.
+> 
+> Test also with several CPUS: `make qemu CPUS=2`.
+> 
+> ```
+> Hello, I am environment 00001000.
+> Hello, I am environment 00001001.
+> Hello, I am environment 00001002.
+> Back in environment 00001000, iteration 0.
+> Back in environment 00001001, iteration 0.
+> Back in environment 00001002, iteration 0.
+> Back in environment 00001000, iteration 1.
+> Back in environment 00001001, iteration 1.
+> Back in environment 00001002, iteration 1.
+> ```
+> After the yield programs exit, there will be no runnable environment in the system, the scheduler should invoke the JOS kernel monitor. If any of this does not happen, then fix your code before proceeding.
 
-与上一个练习相似，这里我们需要把`breakpoint`异常引入到`monitor`函数中。
+实现轮转调度。另外还要修改`kern/syscall.c`加入对 `SYS_yield` 的支持，并在`kern/init.c`中加载3个`user_yield`进程测试。
 
 ```javascript
-static void
-trap_dispatch(struct Trapframe *tf)
+void
+sched_yield(void)
 {
-	// Handle processor exceptions.
-	// LAB 3: Your code here.
-	if (tf->tf_trapno == T_PGFLT) {
-		return page_fault_handler(tf);
+	struct Env *idle;
+	idle = curenv;
+	int idx = idle ? ENVX(idle->env_id) : -1;
+
+	int i;
+	for(i = idx + 1; i < NENV; i++){
+		if(envs[i].env_status == ENV_RUNNABLE){
+			env_run(&envs[i]);
+		}
+	}
+	for(i = 0; i <= idx; i++){
+		if(envs[i].env_status == ENV_RUNNABLE){
+			env_run(&envs[i]);
+		}
+	}
+	if(idle && idle->env_status == ENV_RUNNING) {
+		env_run(idle);
 	}
 
-	if (tf->tf_trapno == T_BRKPT) {
-		return monitor(tf);
-	}
-	// Unexpected trap: The user process or the kernel has a bug.
-	print_trapframe(tf);
-	if (tf->tf_cs == GD_KT)
-		panic("unhandled trap in kernel");
-	else {
-		env_destroy(curenv);
-		return;
-	}
-	
+	sched_halt();
 }
+
+// kern/syscall.c修改
+	...
+	
+	case SYS_yield:
+        sys_yield();
+        return 0;
+   
+    ...
+
+// 修改测试进程     
+	...
+
+    // Touch all you want.
+    ENV_CREATE(user_primes, ENV_TYPE_USER);
+    // ENV_CREATE(user_primes, ENV_TYPE_USER);
+    ENV_CREATE(user_yield, ENV_TYPE_USER);
+    ENV_CREATE(user_yield, ENV_TYPE_USER);
+    ENV_CREATE(user_yield, ENV_TYPE_USER);
+	
+	...
 ```
 
+## Question
+> In your implementation of `env_run()` you should have called `lcr3()`. Before and after the call to `lcr3()`, your code makes references (at least it should) to the variable e, the argument to `env_run`. Upon loading the %cr3 register, the addressing context used by the MMU is instantly changed. But a virtual address (namely e) has meaning relative to a given address context--the address context specifies the physical address to which the virtual address maps. Why can the pointer e be dereferenced both before and after the addressing switch?
+
+这是因为所有的进程`env_pgdir`的高地址的映射跟`kern_pgdir`的是一样的，见实验3的`env_setup_vm()`。
+
+> Whenever the kernel switches from one environment to another, it must ensure the old environment's registers are saved so they can be restored properly later. Why? Where does this happen?
+
+当然要保存寄存器状态，以知道下一条指令地址以及进程栈的状态，不然我们不知道从哪里继续运行。保存寄存器状态的代码是 `trap.c` 中的 `curenv->env_tf = *tf`。
+
 ## Challenge
-> Modify the JOS kernel monitor so that you can 'continue' execution from the current location (e.g., after the int3, if the kernel monitor was invoked via the breakpoint exception), and so that you can single-step one instruction at a time. You will need to understand certain bits of the EFLAGS register in order to implement single-stepping.
+
+> Add a less trivial scheduling policy to the kernel, such as a fixed-priority scheduler that allows each environment to be assigned a priority and ensures that higher-priority environments are always chosen in preference to lower-priority environments. If you're feeling really adventurous, try implementing a Unix-style adjustable-priority scheduler or even a lottery or stride scheduler. (Look up "lottery scheduling" and "stride scheduling" in Google.)
 > 
-> Optional: If you're feeling really adventurous, find some x86 disassembler source code - e.g., by ripping it out of QEMU, or out of GNU binutils, or just write it yourself - and extend the JOS kernel monitor to be able to disassemble and display instructions as you are stepping through them. Combined with the symbol table loading from lab 1, this is the stuff of which real kernel debuggers are made.
+> Write a test program or two that verifies that your scheduling algorithm is working correctly (i.e., the right environments get run in the right order). It may be easier to write these test programs once you have implemented fork() and IPC in parts B and C of this lab.
 
 留做
 
-## Questions
+## Challenge
 
-> The break point test case will either generate a break point exception or a general protection fault depending on how you initialized the break point entry in the IDT (i.e., your call to `SETGATE` from `trap_init`). Why? How do you need to set it up in order to get the breakpoint exception to work as specified above and what incorrect setup would cause it to trigger a general protection fault?
+> The JOS kernel currently does not allow applications to use the x86 processor's x87 floating-point unit (FPU), MMX instructions, or Streaming SIMD Extensions (SSE). Extend the Env structure to provide a save area for the processor's floating point state, and extend the context switching code to save and restore this state properly when switching from one environment to another. The FXSAVE and FXRSTOR instructions may be useful, but note that these are not in the old i386 user's manual because they were introduced in more recent processors. Write a user-level test program that does something cool with floating-point.
 
-在设置IDT表中的`breakpoint exception`的表项时，如果我们把表项中的DPL字段设置为3，则会触发`breakpoint exception`，如果设置为0，则会触发`general protection exception`。DPL字段代表的含义是段描述符优先级（Descriptor Privileged Level DPL），如果我们想要当前执行的程序能够跳转到这个描述符所指向的程序那里继续执行的话，有个要求，就是要求当前运行程序的CPL，RPL的最大值需要小于等于异常处理函数的DPL，否则就会出现优先级低的代码试图去访问优先级高的代码的情况，就会触发`general protection exception`。那么我们的测试程序首先运行于用户态，它的CPL为3，当异常发生时，它希望去执行 int 3指令，这是一个系统级别的指令，用户态命令的CPL大于 int3 的DPL，所以就会触发`general protection exception`，但是如果把IDT这个表项的DPL设置为3时，就不会出现这样的现象了。
-
-> What do you think is the point of these mechanisms, particularly in light of what the `user/softint` test program does?
-
-`user/softint`的内容：
-
-```javascript
-// buggy program - causes an illegal software interrupt
-
-#include <inc/lib.h>
-
-void
-umain(int argc, char **argv)
-{
-	asm volatile("int $14");	// page fault
-}
-```
-
-这个程序的本意是想触发一个`page fault`，但是在实际运行时触发的却是`General Protection fault`，这是因为在设置IDT表中的`page fault`的表项时，如果我们把表项中的DPL字段设置为了0。所以重点应该是要把异常/中断的特权级别分清楚。
+留做
 
 # Exercise 7
 
-> Add a handler in the kernel for interrupt vector `T_SYSCALL`. You will have to edit `kern/trapentry.S` and `kern/trap.c`'s `trap_init()`. You also need to change `trap_dispatch()` to handle the system call interrupt by calling `syscall()` (defined in `kern/syscall.c`) with the appropriate arguments, and then arranging for the return value to be passed back to the user process in %eax. Finally, you need to implement `syscall()` in `kern/syscall.c`. Make sure `syscall()` returns `-E_INVAL` if the system call number is invalid. You should read and understand `lib/syscall.c` (especially the inline assembly routine) in order to confirm your understanding of the system call interface. Handle all the system calls listed in `inc/syscall.h` by invoking the corresponding kernel function for each call.
->
-> Run the `user/hello` program under your kernel (make `run-hello`). It should print "`hello, world`" on the console and then cause a page fault in user mode. If this does not happen, it probably means your system call handler isn't quite right. You should also now be able to get make grade to succeed on the testbss test.
+>  Implement the system calls described above in `kern/syscall.c` and make sure `syscall()` calls them. You will need to use various functions in `kern/pmap.c` and `kern/env.c`, particularly `envid2env()`. For now, whenever you call `envid2env()`, pass 1 in the checkperm parameter. Be sure you check for any invalid system call arguments, returning `-E_INVAL` in that case. Test your JOS kernel with `user/dumbfork` and make sure it works before proceeding.
 
-关于系统调用的流程我们已经在理论篇分析过了，这个exercise让我们实现`T_SYSCALL`这个中断，首先就要在 `kern/trapentry.S` 文件中为它声明它的中断处理函数，即`TRAPHANDLER_NOEC`，然后需要在`trap_init()` 函数中为它注册，这些我们在之前的exercise中已经做了。接下来在函数`trap_dispatch()`中对系统调用分发到`syscall()`函数，这里我们首先对`trap_dispatch()`函数进行修改：
+实现 `sys_exofork`，`sys_env_set_status`，`sys_page_alloc`，`sys_page_map`，`sys_page_unmap` 这几个系统调用，参照提示依次完成，别忘了在`syscall()`函数中加入对应的系统调用分发代码，最后修改 `kern/init.c` 中加载的用户程序为 `user_dumbfork`即可开始测试。
+
+## `sys_exofork()`
 
 ```javascript
-	...
-	if (tf->tf_trapno == T_SYSCALL) {
-		tf->tf_regs.reg_eax = syscall(
-			tf->tf_regs.reg_eax,
-			tf->tf_regs.reg_edx,
-			tf->tf_regs.reg_ecx,
-			tf->tf_regs.reg_ebx,
-			tf->tf_regs.reg_edi,
-			tf->tf_regs.reg_esi
-		);
-		return;
-	}
-	...
+static envid_t
+sys_exofork(void) 
+{
+	struct Env *e;
+	int res = env_alloc(&e, curenv->env_id);
+	if(res > 0) return res;
+	e->env_status = ENV_NOT_RUNNABLE;
+	e->env_tf = curenv->env_tf;
+	e->env_tf.tf_regs.reg_eax = 0;
+	return e->env_id;
+}
 ```
 
-然后在`syscall()`函数中根据不同的系统调用序号，执行不同的函数：
+## `sys_env_set_status()`
 
 ```javascript
-// Dispatches to the correct kernel function, passing the arguments.
-int32_t
-syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
+static int
+sys_env_set_status(envid_t envid, int status)
 {
-	// Call the function corresponding to the 'syscallno' parameter.
-	// Return any appropriate return value.
-	// LAB 3: Your code here.
-	switch (syscallno) {
-		case SYS_cputs : 
-			sys_cputs((const char*)a1, a2);
-			return 0;
-		case SYS_cgetc : 
-			return sys_cgetc();
-		case SYS_getenvid : 
-			return sys_getenvid();
-		case SYS_env_destroy : 
-			return sys_env_destroy(a1);
-		default:
-			return -E_INVAL;
-	}
+	if(status != ENV_RUNNABLE && status != ENV_NOT_RUNNABLE) return -E_INVAL;
+
+	struct Env* e;
+	int res = envid2env(envid, &e, 1);
+	if(res < 0) return res;
+	e->env_status = status;
+	return 0;
 }
+```
+
+## `sys_page_alloc()`
+
+```javascript
+static int
+sys_page_alloc(envid_t envid, void *va, int perm)
+{
+    struct Env *env;
+    struct PageInfo *pp;
+
+    if (envid2env(envid, &env, 1) < 0)
+            return -E_BAD_ENV;
+    if ((uintptr_t)va >= UTOP || PGOFF(va))
+            return -E_INVAL;
+    if ((perm & PTE_U) == 0 || (perm & PTE_P) == 0)
+            return -E_INVAL;
+    if ((perm & ~(PTE_U | PTE_P | PTE_W | PTE_AVAIL)) != 0)
+            return -E_INVAL;
+    if ((pp = page_alloc(ALLOC_ZERO)) == NULL)
+            return -E_NO_MEM;
+    if (page_insert(env->env_pgdir, pp, va, perm) < 0) {
+            page_free(pp);
+            return -E_NO_MEM;
+    }
+    return 0;
+}
+```
+
+## `sys_page_map()`
+
+```javascript
+static int
+sys_page_map(envid_t srcenvid, void *srcva,
+	     envid_t dstenvid, void *dstva, int perm)
+{
+	struct Env *srcenv, *dstenv;
+    struct PageInfo *pp;
+    pte_t *pte;
+
+    if (envid2env(srcenvid, &srcenv, 1) < 0 || envid2env(dstenvid, &dstenv, 1) < 0)
+        return -E_BAD_ENV;
+    if ((uintptr_t)srcva >= UTOP || PGOFF(srcva) || (uintptr_t)dstva >= UTOP || PGOFF(dstva))
+        return -E_INVAL;
+    if ((perm & PTE_U) == 0 || (perm & PTE_P) == 0 || (perm & ~PTE_SYSCALL) != 0)
+        return -E_INVAL;
+    if ((pp = page_lookup(srcenv->env_pgdir, srcva, &pte)) == NULL)
+        return -E_INVAL;
+    if ((perm & PTE_W) && (*pte & PTE_W) == 0)
+        return -E_INVAL;
+    if (page_insert(dstenv->env_pgdir, pp, dstva, perm) < 0)
+        return -E_NO_MEM;
+    return 0;
+}
+```
+
+## `sys_page_unmap()`
+
+```javascript
+static int
+sys_page_unmap(envid_t envid, void *va)
+{
+	struct Env *env;
+
+    if (envid2env(envid, &env, 1) < 0)
+        return -E_BAD_ENV;
+    if ((uintptr_t)va >= UTOP || PGOFF(va))
+        return -E_INVAL;
+
+    page_remove(env->env_pgdir, va);
+    return 0;
+}
+```
+
+最后在`syscall()`函数中加入对应的系统调用分发代码：
+
+```javascript
+	 ...
+    case SYS_exofork:
+        return sys_exofork();
+    case SYS_env_set_status:
+        return sys_env_set_status(a1, a2);
+    case SYS_page_alloc:
+        return sys_page_alloc(a1, (void *)a2, a3);
+    case SYS_page_map:
+        return sys_page_map(a1, (void*)a2, a3, (void*)a4, a5);
+    case SYS_page_unmap:
+        return sys_page_unmap(a1, (void *)a2);
+    ...
 ```
 
 ## Challenge
 
-> Challenge! Implement system calls using the sysenter and sysexit instructions instead of using int 0x30 and iret.
->
-> The sysenter/sysexit instructions were designed by Intel to be faster than int/iret. They do this by using registers instead of the stack and by making assumptions about how the segmentation registers are used. The exact details of these instructions can be found in Volume 2B of the Intel reference manuals.
-> 
-> The easiest way to add support for these instructions in JOS is to add a sysenter_handler in kern/trapentry.S that saves enough information about the user environment to return to it, sets up the kernel environment, pushes the arguments to syscall() and calls syscall() directly. Once syscall() returns, set everything up for and execute the sysexit instruction. You will also need to add code to kern/init.c to set up the necessary model specific registers (MSRs). Section 6.1.2 in Volume 2 of the AMD Architecture Programmer's Manual and the reference on SYSENTER in Volume 2B of the Intel reference manuals give good descriptions of the relevant MSRs. You can find an implementation of wrmsr to add to inc/x86.h for writing to these MSRs here.
-> 
-> Finally, lib/syscall.c must be changed to support making a system call with sysenter. Here is a possible register layout for the sysenter instruction:
-> ```javascript
->	eax                - syscall number
->	edx, ecx, ebx, edi - arg1, arg2, arg3, arg4
->	esi                - return pc
->	ebp                - return esp
->	esp                - trashed by sysenter
-> ```	
-> GCC's inline assembler will automatically save registers that you tell it to load values directly into. Don't forget to either save (push) and restore (pop) other registers that you clobber, or tell the inline assembler that you're clobbering them. The inline assembler doesn't support saving %ebp, so you will need to add code to save and restore it yourself. The return address can be put into %esi by using an instruction like leal after_sysenter_label, %%esi.
->
-> Note that this only supports 4 arguments, so you will need to leave the old method of doing system calls around to support 5 argument system calls. Furthermore, because this fast path doesn't update the current environment's trap frame, it won't be suitable for some of the system calls we add in later labs.
-> 
-> You may have to revisit your code once we enable asynchronous interrupts in the next lab. Specifically, you'll need to enable interrupts when returning to the user process, which sysexit doesn't do for you.
+> Add the additional system calls necessary to read all of the vital state of an existing environment as well as set it up. Then implement a user mode program that forks off a child environment, runs it for a while (e.g., a few iterations of sys_yield()), then takes a complete snapshot or checkpoint of the child environment, runs the child for a while longer, and finally restores the child environment to the state it was in at the checkpoint and continues it from there. Thus, you are effectively "replaying" the execution of the child environment from an intermediate state. Make the child environment perform some interaction with the user using sys_cgetc() or readline() so that the user can view and mutate its internal state, and verify that with your checkpoint/restart you can give the child environment a case of selective amnesia, making it "forget" everything that happened beyond a certain point.
 
 留做
+
+完成后运行`make grade`，应该可以看到 Part A得分为5分。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Exercise 8
 
