@@ -39,6 +39,7 @@ vector<int> KMP(string& s, string& p){
 }
 
 int main(){
-
+    string s = "babab", p = "babab";
+    KMP(s, p);
     return 1;
 }
