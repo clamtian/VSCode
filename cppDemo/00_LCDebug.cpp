@@ -47,15 +47,6 @@ bool compare(const pair<string, int>& p1, const pair<string, int>& p2){
 }
 
 typedef pair<int, int> PII;
-/**
- * Definition for a binary tree node.
- * struct TreeNode {
- *     int val;
- *     TreeNode *left;
- *     TreeNode *right;
- *     TreeNode(int x) : val(x), left(NULL), right(NULL) {}
- * };
- */
 typedef unsigned long long ULL ;
 class Solution {
 public:
@@ -88,10 +79,6 @@ public:
         return h[r + 1] - h[l] * p[r - l + 1];
     }
 };
-
-// Your Codec object will be instantiated and called as such:
-// Codec ser, deser;
-// TreeNode* ans = deser.deserialize(ser.serialize(root));
 
 int main() {
 
