@@ -56,69 +56,36 @@ typedef pair<int, int> PII;
  *     TreeNode(int x) : val(x), left(NULL), right(NULL) {}
  * };
  */
+typedef unsigned long long ULL ;
 class Solution {
 public:
-
-    // Encodes a tree to a single string.
-    string serialize(TreeNode* root) {
-        string res;
-        if(!root) return res;
-        TreeNode* node = root;
-        stack<TreeNode*> s;
-        s.push(node);
-        TreeNode* z = new TreeNode(0);
-        while(s.size()){
-            node = s.top();
-            s.pop();
-            if(node == z) res += "#_";
-            else{
-                res += to_string(node->val) + "_";
-                if(node->right) s.push(node->right);
-                else s.push(z);
-                if(node->left) s.push(node->left);
-                else s.push(z);
+    long long P = 13331;
+    long long sumScores(string s) {
+        long long n = s.size();
+        vector<ULL> h(n + 1), p(n + 1);
+        for (int i = 1; i <= n; ++i){
+            h[i] = h[i - 1] * P + s[i - 1];
+            p[i] = p[i - 1] * P;
+        }
+        long long ans = n;
+        for (int i = 1; i < n; ++i) {
+            int l = i, r = n - 1;
+            while (l < r) {
+                int mid = (l + r + 1) >> 1;
+                ULL v = get(i, mid, h, p);
+                if(v == get(0, mid - i, h, p)) l = mid;
+                else r = mid - 1;
             }
+            if (l != i) ans += l - i + 1;
+            else ans += s[i] == s[0] ? 1 : 0;
+            cout << ans << endl;
         }
-        res.pop_back();
-        cout << res << endl;
-        return res;
+        return ans;
     }
 
-    // Decodes your encoded data to tree.
-    TreeNode* deserialize(string data) {
-        vector<string> v = preProcess(data);
-        int n = v.size();
-        if(!n) return NULL;
-        TreeNode* head = new TreeNode(stoi(v[0]));
-        int p = 1;
-        dfs(head, v, p);
-        return head;
-    }
-    void dfs(TreeNode* head, vector<string>& v, int& p){
-        if(p < v.size() && v[p] != "#"){
-            TreeNode* l = new TreeNode(stoi(v[p]));
-            head->left = l;
-            dfs(head->left, v, ++p);
-        }
-        ++p;
-        if(p < v.size() && v[p] != "#"){
-            TreeNode* r = new TreeNode(stoi(v[p]));
-            head->right = r;
-            dfs(head->right, v, ++p);
-        }
-    } 
-    vector<string> preProcess(string& s){
-        int n = s.size();
-        int p = 0;
-        vector<string> res;
-        while(p < n){
-            int t = p;
-            while(t < n && s[t] != '_') ++t;
-            string str = s.substr(p, t - p);
-            res.push_back(str);
-            p = t + 1;
-        }
-        return res;
+    // 计算子串 str[l ~ r] 的哈希值 
+    ULL get(int l, int r, vector<ULL>& h, vector<ULL>& p){
+        return h[r + 1] - h[l] * p[r - l + 1];
     }
 };
 
@@ -182,6 +149,6 @@ int main() {
                                 {"Carla","5","Ceviche"},
                                 {"Rous","3","Ceviche"} };
     Solution so;
-    so.deserialize("1_2_#_#_3_4_#_#_5_#_#");
+    so.sumScores("ababa");
     return 0;
 }

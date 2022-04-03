@@ -26,6 +26,7 @@ vector<ULL> getHashVec(string& s){
     int n = s.size();
     // h[k]存储字符串前k个字母的哈希值, p[k]存储 P^k mod 2^64
     vector<ULL> h(n + 1), p(n + 1);
+    p[0] = 1;
     for (int i = 1; i <= n; ++i){
         h[i] = h[i - 1] * P + s[i - 1];
         p[i] = p[i - 1] * P;
