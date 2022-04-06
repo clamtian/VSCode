@@ -307,6 +307,15 @@ page_fault_handler(struct Trapframe *tf)
 
 然后将`trip-time ESP - 4`放入到esp寄存器中，此时esp指向`trap-time eip`，最后使用ret将执行指令跳转至出错时的程序。
 
+## 2.5 写时复制总流程
+
+* 父进程调用`fork()`创建新进程；
+* `fork()`中调用`set_pgfault_handler`设置页面错误处理程序；
+* 接着`fork()`中调用`sys_exofork`创建一个空白子进程；
+*  对父进程在UTOP之下的可写或者COW的物理页，父进程调用duppage，duppage会将这些页面设置为COW映射到子进程的地址空间，同时，也要将父进程本身的页面重新映射，将页面权限设置为COW(注：子进程的COW设置要在父进程之前)。duppage将父子进程相关页面权限设置为不可写，且在avail字段设置为COW，用于区分只读页面和COW页面。异常栈不以这种方式重新映射，需要在子进程分配一个新的页面给异常栈用。fork()还要处理那些不是可写的且不是COW的页面。
+4）父进程设置子进程的页面错误处理函数。
+5）父进程标识子进程状态为可运行。
+
 
 
 
