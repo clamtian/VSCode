@@ -208,7 +208,7 @@ tf_err (error code)
 fault_va            <-- %esp when handler is run
 ```
 
-这里有必要仔细探究一下页面错误处理函数的执行以及回退到原出错代码重新执行的具体流程：
+页面错误处理函数的执行流程：
 
 ```javascript
 void
@@ -251,7 +251,47 @@ page_fault_handler(struct Trapframe *tf)
 }
 ```
 
-重点是调用页面错误处理函数返回时的操作，以中断递归为例，错误处理函数返回时的异常栈结构如下：
+重点是调用页面错误处理函数返回时的操作，这部分代码在`lib/pfentry.S`中的`_pgfault_upcall`部分。
+
+```javascript
+.text
+.globl _pgfault_upcall
+_pgfault_upcall:
+	// Call the C page fault handler.
+	pushl %esp			// function argument: pointer to UTF
+	movl _pgfault_handler, %eax
+	call *%eax			
+	addl $4, %esp			// pop function argument
+
+ 	// LAB 4: Your code here.
+    movl 0x28(%esp), %ebx  # trap-time eip
+    subl $0x4, 0x30(%esp)  # trap-time esp minus 4
+    movl 0x30(%esp), %eax 
+    movl %ebx, (%eax)      # trap-time esp store trap-time eip
+    addl $0x8, %esp 
+
+    // Restore the trap-time registers.  After you do this, you
+    // can no longer modify any general-purpose registers.
+    // LAB 4: Your code here.
+    popal
+
+    // Restore eflags from the stack.  After you do this, you can
+    // no longer use arithmetic operations or anything else that
+    // modifies eflags.
+    // LAB 4: Your code here.
+    addl $0x4, %esp
+    popfl
+    
+	// Switch back to the adjusted trap-time stack.
+    // LAB 4: Your code here.
+    popl %esp
+
+    // Return to re-execute the instruction that faulted.
+    // LAB 4: Your code here.
+    ret 
+```
+
+以中断递归为例，错误处理函数返回时的异常栈结构如下：
 
 ```javascript
      +--------------------+ UXSTACKTOP             

@@ -463,32 +463,211 @@ page_fault_handler(struct Trapframe *tf)
 
 如果异常不停递归就可能耗尽异常堆栈的空间，在`page_fault_handler()`里的`user_mem_asser()`会检查是否overflow，如果是就会直接销毁这个env。
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 # Exercise 10
 
-> Boot your kernel, running `user/evilhello`. The environment should be destroyed, and the kernel should not panic. You should see:
-> ```javascript
->	[00000000] new env 00001000
->	...
->	[00001000] user_mem_check assertion failure for va f010000c
->	[00001000] free env 00001000
+> Implement the `_pgfault_upcall` routine in `lib/pfentry.S`. The interesting part is returning to the original point in the user code that caused the page fault. You'll return directly there, without going back through the kernel. The hard part is simultaneously switching stacks and re-loading the EIP.
+
+这部分已经在理论部分分析过了。
+
+```javascript
+.text
+.globl _pgfault_upcall
+_pgfault_upcall:
+	// Call the C page fault handler.
+	pushl %esp			// function argument: pointer to UTF
+	movl _pgfault_handler, %eax
+	call *%eax			
+	addl $4, %esp			// pop function argument
+
+ 	// LAB 4: Your code here.
+    movl 0x28(%esp), %ebx  # trap-time eip
+    subl $0x4, 0x30(%esp)  # trap-time esp minus 4
+    movl 0x30(%esp), %eax 
+    movl %ebx, (%eax)      # trap-time esp store trap-time eip
+    addl $0x8, %esp 
+
+    // Restore the trap-time registers.  After you do this, you
+    // can no longer modify any general-purpose registers.
+    // LAB 4: Your code here.
+    popal
+
+    // Restore eflags from the stack.  After you do this, you can
+    // no longer use arithmetic operations or anything else that
+    // modifies eflags.
+    // LAB 4: Your code here.
+    addl $0x4, %esp
+    popfl
+    
+	// Switch back to the adjusted trap-time stack.
+    // LAB 4: Your code here.
+    popl %esp
+
+    // Return to re-execute the instruction that faulted.
+    // LAB 4: Your code here.
+    ret 
+```
+
+# Exercise 11
+
+> Finish `set_pgfault_handler()` in `lib/pgfault.c`.
+
+进程在运行前要注册自己的页面错误处理函数，这里是调用了之前我们实现的`sys_env_set_pgfault_upcall()`函数：
+
+```javascript
+void
+set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
+{
+	int r;
+
+	if (_pgfault_handler == 0) {
+		// First time through!
+		// LAB 4: Your code here.
+		if(sys_page_alloc(thisenv->env_id, (void *)(UXSTACKTOP - PGSIZE), PTE_W | PTE_U | PTE_P)){
+			panic("set_pgfault_handler page_alloc failed");
+		}
+		if(sys_env_set_pgfault_upcall(thisenv->env_id, _pgfault_upcall)){
+			panic("set_pgfault_handler set_pgfault_upcall failed");
+		}
+	}
+
+	// Save handler pointer for assembly to call.
+	_pgfault_handler = handler;
+}
+```
+
+## Challenge
+
+> Extend your kernel so that not only page faults, but all types of processor exceptions that code running in user space can generate, can be redirected to a user-mode exception handler. Write user-mode test programs to test user-mode handling of various exceptions such as divide-by-zero, general protection fault, and illegal opcode.
+
+留做
+
+# Exercise 12
+
+> Implement `fork`, `duppage` and `pgfault` in `lib/fork.c`.
+> 
+> Test your code with the forktree program. It should produce the following messages, with interspersed 'new env', 'free env', and 'exiting gracefully' messages. The messages may not appear in this order, and the environment IDs may be different.
 > ```
+>	1000: I am ''
+>	1001: I am '0'
+>	2000: I am '00'
+>	2001: I am '000'
+>	1002: I am '1'
+>	3000: I am '11'
+>	3001: I am '10'
+>	4000: I am '100'
+>	1003: I am '01'
+>	5000: I am '010'
+>	4001: I am '011'
+>	2002: I am '110'
+>	1004: I am '001'
+>	1005: I am '111'
+>	1006: I am '101'
+>```
 
-按照要求运行一下`user/evilhello`，如果出现上述信息，证明你这个lab做的是成功的。运行`make grade`可以打分，看看自己有没有错误的地方。
+首先是`pgfault`处理页面错误时的写时拷贝：
 
+```javascript
+static void
+pgfault(struct UTrapframe *utf)
+{
+    int r;
+    void *addr = (void *) utf->utf_fault_va;
+    uint32_t err = utf->utf_err;
 
+    if ((err & FEC_WR) == 0 || (uvpt[PGNUM(addr)] & PTE_COW) == 0)
+        panic("pgfault: it's not writable or attempt to access a non-cow page!");
+    // Allocate a new page, map it at a temporary location (PFTEMP),
+    // copy the data from the old page to the new page, then move the new
+    // page to the old page's address.
 
+    envid_t envid = sys_getenvid();
+    if ((r = sys_page_alloc(envid, (void *)PFTEMP, PTE_P | PTE_W | PTE_U)) < 0)
+        panic("pgfault: page allocation failed %e", r);
 
+    addr = ROUNDDOWN(addr, PGSIZE);
+    memmove(PFTEMP, addr, PGSIZE);
+    if ((r = sys_page_unmap(envid, addr)) < 0)
+        panic("pgfault: page unmap failed %e", r);
+    if ((r = sys_page_map(envid, PFTEMP, envid, addr, PTE_P | PTE_W |PTE_U)) < 0)
+        panic("pgfault: page map failed %e", r);
+    if ((r = sys_page_unmap(envid, PFTEMP)) < 0)
+        panic("pgfault: page unmap failed %e", r);
+}
+```
+
+在`pgfault`函数中先判断是否页错误是由写时拷贝造成的，如果不是则panic。借用了一个一定不会被用到的位置PFTEMP，专门用来发生page fault的时候拷贝内容用的。先解除addr原先的页映射关系，然后将addr映射到PFTEMP映射的页，最后解除PFTEMP的页映射关系。
+
+接下来是`duppage`函数，负责进行COW方式的页复制，将当前进程的第pn页对应的物理页的映射到envid的第pn页上去，同时将这一页都标记为COW。
+
+```javascript
+static int
+duppage(envid_t envid, unsigned pn)
+{
+    int r;
+
+    void *addr;
+    pte_t pte;
+    int perm;
+
+    addr = (void *)((uint32_t)pn * PGSIZE);
+    pte = uvpt[pn];
+    perm = PTE_P | PTE_U;
+    if ((pte & PTE_W) || (pte & PTE_COW))
+        perm |= PTE_COW;
+    if ((r = sys_page_map(thisenv->env_id, addr, envid, addr, perm)) < 0) {
+        panic("duppage: page remapping failed %e", r);
+        return r;
+    }
+    if (perm & PTE_COW) {
+        if ((r = sys_page_map(thisenv->env_id, addr, thisenv->env_id, addr, perm)) < 0) {
+            panic("duppage: page remapping failed %e", r);
+            return r;
+        }
+    }
+    return 0;
+}
+```
+
+最后是`fork`函数，将页映射拷贝过去，这里需要考虑的地址范围就是从UTEXT到UXSTACKTOP为止，而在此之上的范围因为都是相同的，在`env_alloc`的时候已经设置好了。
+
+```javascript
+envid_t
+fork(void)
+{
+	// LAB 4: Your code here.
+	set_pgfault_handler(pgfault);
+
+	envid_t envid = sys_exofork();
+	uint8_t *addr;
+	if (envid < 0)
+		panic("sys_exofork:%e", envid);
+	if (envid == 0) {
+		thisenv = &envs[ENVX(sys_getenvid())];
+		return 0;
+	}
+
+	for (addr = (uint8_t *)UTEXT; addr < (uint8_t *)USTACKTOP; addr += PGSIZE) {
+		if ((uvpd[PDX(addr)] & PTE_P) && (uvpt[PGNUM(addr)] & PTE_P)
+				&& (uvpt[PGNUM(addr)] & PTE_U)) {
+			duppage(envid, PGNUM(addr));
+		}
+	}
+
+	duppage(envid, PGNUM(ROUNDDOWN(&addr, PGSIZE)));
+
+	int r;
+	if ((r = sys_page_alloc(envid, (void *)(UXSTACKTOP - PGSIZE), PTE_P|PTE_U|PTE_W)))
+		panic("sys_page_alloc:%e", r);
+
+	extern void _pgfault_upcall();
+	sys_env_set_pgfault_upcall(envid, _pgfault_upcall);
+
+	if ((r = sys_env_set_status(envid, ENV_RUNNABLE)))
+		panic("sys_env_set_status:%e", r);
+
+	return envid;
+}
+```
+
+写时复制的总流程已在理论部分分析过了。至此，Lab4的part B的写时复制就完成了。
 
