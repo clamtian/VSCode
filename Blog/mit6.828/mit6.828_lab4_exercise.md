@@ -395,146 +395,86 @@ sys_page_unmap(envid_t envid, void *va)
 
 完成后运行`make grade`，应该可以看到 Part A得分为5分。
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # Exercise 8
 
-> Add the required code to the user library, then boot your kernel. You should see `user/hello` print "`hello, world`" and then print "`i am environment 00001000`". `user/hello` then attempts to "exit" by calling `sys_env_destroy()` (see `lib/libmain.c` and `lib/exit.c`). Since the kernel currently only supports one user environment, it should report that it has destroyed the only environment and then drop into the kernel monitor. You should be able to get make grade to succeed on the hello test.
+> Implement the `sys_env_set_pgfault_upcall` system call. Be sure to enable permission checking when looking up the environment ID of the target environment, since this is a "dangerous" system call.
 
-获得当前正在运行的用户环境的 `env_id` , 以及这个用户环境所对应的 Env 结构体的指针。 `env_id` 我们可以通过调用 `sys_getenvid()` 这个函数来获得。Env 结构体的指针我们可以通过`env_id`来获得，`env_id`的值包含三部分，第31位被固定为0；第10~30这21位是标识符，标示这个用户环境；第0~9位代表这个用户环境所采用的 Env 结构体，在envs数组中的索引。所以我们只需知道 `env_id` 的0~9 位，我们就可以获得这个用户环境对应的 Env 结构体了。
+设置`envid`这个用户环境的页面错误处理函数为`func`，我们在Env结构体中添加了`env_pgfault_upcall`这个变量来记录该信息。
 
 ```javascript
-void
-libmain(int argc, char **argv)
+static int
+sys_env_set_pgfault_upcall(envid_t envid, void *func)
 {
-	// set thisenv to point at our Env structure in envs[].
-	// LAB 3: Your code here.
-	thisenv = &envs[ENVX(sys_getenvid())];
-
-	// save the name of the program so that panic() can use it
-	if (argc > 0)
-		binaryname = argv[0];
-
-	// call user main routine
-	umain(argc, argv);
-
-	// exit gracefully
-	exit();
+	struct Env* e;
+	int res = envid2env(envid, &e, 1);
+	if(res < 0) {
+		cprintf("up here");
+		return res;
+		
+	}
+	e->env_pgfault_upcall = func;
+	return 0;
 }
 ```
 
 # Exercise 9
 
-> Change `kern/trap.c` to panic if a page fault happens in kernel mode.
->
-> Hint: to determine whether a fault happened in user mode or in kernel mode, check the low bits of the tf_cs.
->
-> Read `user_mem_assert` in `kern/pmap.c` and implement `user_mem_check` in that same file.
->
-> Change `kern/syscall.c` to sanity check arguments to system calls.
->
-> Boot your kernel, running `user/buggyhello`. The environment should be destroyed, and the kernel should not panic. You should see:
-> ```javascript
->	[00001000] user_mem_check assertion failure for va 00000001
->	[00001000] free env 00001000
->	Destroyed the only environment - nothing more to do!
-> ```	
-> Finally, change `debuginfo_eip` in `kern/kdebug.c` to call `user_mem_check` on usd, stabs, and stabstr. If you now run `user/breakpoint`, you should be able to run backtrace from the kernel monitor and see the backtrace traverse into `lib/libmain.c` before the kernel panics with a page fault. What causes this page fault? You don't need to fix it, but you should understand why it happens.
+>  Implement the code in `page_fault_handler` in `kern/trap.c` required to dispatch page faults to the user-mode handler. Be sure to take appropriate precautions when writing into the exception stack. (What happens if the user environment runs out of space on the exception stack?)
 
-当页面错误发生时，我们需要判断引起页面错误的代码是在内核中还是在用户程序中，根据 CS 段寄存器的低2位，这两位的名称叫做 CPL 位，表示当前运行的代码的访问权限级别，0代表是内核态，3代表是用户态。如果这个 `page fault` 是出现在内核中时，要把这个事件 `panic` 出来，所以我们把 `page_fault_handler` 文件修改如下：
+在`page_fault_handler`完成用户页面错误的处理，主要是切换堆栈到异常栈，并设置异常栈内容，最后设置EIP为页面错误处理函数的地址，切回用户态执行页面错误处理函数。注意嵌套页错误的处理，嵌套页错误时，需要保留4字节用于设置EIP。
 
 ```javascript
-	...
+void
+page_fault_handler(struct Trapframe *tf)
+{
+	uint32_t fault_va;
 
-	// Handle kernel-mode page faults.
+	fault_va = rcr2();
 
-	// LAB 3: Your code here.
 	if(!(tf->tf_cs && 0x01)) panic("kernel-mode page fault, fault address %d\n", fault_va);
 
-	...
-```
-
-接下来继续完善 `kern/pmap.c` 文件中的 `user_mem_check` 函数，通过观察 `user_mem_assert` 函数我们发现，它调用了 `user_mem_check` 函数。而 `user_mem_check` 函数的功能是检查一下当前用户态程序是否有对虚拟地址空间 [va, va+len] 的 `perm| PTE_P` 访问权限。搜易我们需要先找到这个虚拟地址范围对应于当前用户态程序的页表中的页表项，然后再去看一下这个页表项中有关访问权限的字段，是否包含 `perm | PTE_P`，只要有一个页表项是不包含的，就代表程序对这个范围的虚拟地址没有 `perm|PTE_P` 的访问权限。
-
-```javascript
-int
-user_mem_check(struct Env *env, const void *va, size_t len, int perm)
-{
-	// LAB 3: Your code here.
-
-	char *start, *end;
-	start = ROUNDDOWN((char *)va, PGSIZE);
-	end = ROUNDUP((char *)(va + len), PGSIZE);
-	pte_t *cur = NULL;
-
-	for(; start < end; start += PGSIZE){
-		cur = pgdir_walk(env->env_pgdir, start, 0);
-		if(!cur || (int)start >= ULIM || !(*cur & PTE_P) || ((int)*cur & perm) != perm){
-			user_mem_check_addr = (void *)start < va ? (uintptr_t)va : (uintptr_t)start;
-			return -E_FAULT;
+	if(curenv->env_pgfault_upcall){
+		struct UTrapframe *utf;
+		if(tf->tf_esp >=  UXSTACKTOP-PGSIZE && tf->tf_esp < UXSTACKTOP){
+			utf = (struct UTrapframe *)(tf->tf_esp - sizeof(struct UTrapframe) - 4);
+		}else {
+			utf = (struct UTrapframe *)(UXSTACKTOP- sizeof(struct UTrapframe));
 		}
+		user_mem_assert(curenv, utf, 1, PTE_W);
+
+		utf->utf_fault_va = fault_va;
+		utf->utf_err = tf->tf_err;
+		utf->utf_regs = tf->tf_regs;
+		utf->utf_eip = tf->tf_eip;
+		utf->utf_eflags = tf->tf_eflags;
+		utf->utf_esp = tf->tf_esp;
+
+		curenv->env_tf.tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
+		curenv->env_tf.tf_esp = (uintptr_t)utf;
+		env_run(curenv);
 	}
-	return 0;
+
+	cprintf("[%08x] user fault va %08x ip %08x\n",
+		curenv->env_id, fault_va, tf->tf_eip);
+	print_trapframe(tf);
+	env_destroy(curenv);
 }
 ```
 
-我们还要补全 `kern/syscall.c` 文件中的 `sys_cputs` 函数，这个函数要求检查用户程序对虚拟地指空间 [s, s+len] 是否有访问权限:
+如果异常不停递归就可能耗尽异常堆栈的空间，在`page_fault_handler()`里的`user_mem_asser()`会检查是否overflow，如果是就会直接销毁这个env。
 
-```javascript
-static void
-sys_cputs(const char *s, size_t len)
-{
-	// Check that the user has permission to read memory [s, s+len).
-	// Destroy the environment if not.
-	user_mem_assert(curenv, s, len, 0);
-	// LAB 3: Your code here.
-	// Print the string supplied by the user.
-	cprintf("%.*s", len, s);
-}
-```
 
-最后在`kern/kdebug`中修改`debuginfo_eip`函数，对用户空间的数据使用`user_mem_check()`函数检查当前用户空间是否对其有`PTE_U`权限。
 
-```javascript
-		...
 
-		// Make sure this memory is valid.
-		// Return -1 if it is not.  Hint: Call user_mem_check.
-		// LAB 3: Your code here.
-		if(user_mem_check(curenv, usd, sizeof(*usd), PTE_U) < 0) return -1;
-		
-		stabs = usd->stabs;
-		stab_end = usd->stab_end;
-		stabstr = usd->stabstr;
-		stabstr_end = usd->stabstr_end;
 
-		// Make sure the STABS and string table memory is valid.
-		// LAB 3: Your code here.
-		if(user_mem_check(curenv, stabs, sizeof(*stabs), PTE_U) < 0 || user_mem_check(curenv, stabstr, sizeof(*stabstr), PTE_U) < 0)
-			return -1;
-		
-		...
-```
+
+
+
+
+
+
+
+
 
 # Exercise 10
 
