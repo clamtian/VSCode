@@ -362,44 +362,18 @@ _pgfault_upcall:
 * `pgfault()`检查这是一个写错误(错误码中的FEC_WR)且页面权限是COW的，如果不是则报错;
 * `pgfault()`分配一个新的物理页，并映射到一个临时位置，然后将出错页面的内容拷贝到新的物理页中，然后将新的页设置为用户可读写权限，并映射到对应位置。
 
+# 3.抢占式调度和进程间通信
 
+## 3.1 时钟中断
 
+运行`user/spin`测试程序，这个测试程序会创建一个子进程，一旦它获得对CPU的控制权，它就会进入死循环。无论是父进程还是内核都不会重新获得CPU的控制权。就保护系统不受用户环境中的bug或恶意代码的影响而言，这显然不是理想的情况，因为任何用户环境都可以通过进入无限循环而永远不释放CPU来停止整个系统。为了让内核从一个正在运行的环境中抢回CPU的控制权，我们必须扩展JOS内核，以支持来自时钟的外部硬件中断(hardware interrupts)。
 
+### 3.1.1 中断原理
 
+时钟中断属于可屏蔽中断，可以通过 eflags 寄存器的IF位来控制，注意由int指令触发的软件中断不受eflags寄存器的控制，它是不可屏蔽中断，此外NMI也属于不可屏蔽中断。
 
+外部中断通常称之为 IRQ，IRQ到中断描述符表的入口不是固定的。不过在 pic_init 中我们将IRQ的0-15映射到了IDT的[IRQ_OFFSET, IRQ_OFFSET+15]。其中IRQ_OFFSET为32，所以IRQ在IDT中范围为[32, 47]，共16个。JOS中对中断做了简化处理，在内核态时外部中断是禁止的，在用户态时才会开启。中断开启和禁止是通过eflags寄存器的 FL_IF 位来控制，为1表示开启中断，为0则禁止中断。
 
-
-
-
-
-
-
-# 3.系统调用
-
-
-> ## 关于CPL, RPL, DPL
-> 
-
-> ```javascript
->     用户进程                         内核         
->   
->     用户代码
->	  CPL = 3                       
->     系统调用     ------------->     内核代码
->	 					             CPL = 0
->						   引起系统的调用的用户进程 RPL = 3   ------------->   系统调用函数
->						                                                     DPL = 3(对比RPL，允许调用)
-> ```
-
-关于上述系统调用的路径如下：
-
-```javascript
-```
-
-
-![avatar](./image/汇编.png)
-```javascript
-```
 
 # 4.用户进程
 
@@ -414,3 +388,5 @@ _pgfault_upcall:
 7. https://github.com/shishujuan/mit6.828-2017/blob/master/docs/lab4-exercize.md
 8. https://blog.csdn.net/a747979985/article/details/98308858
 9. https://blog.csdn.net/bysui/article/details/51842817
+10. https://blog.csdn.net/bysui/article/details/51868306
+11. https://blog.csdn.net/a747979985/article/details/98340436
