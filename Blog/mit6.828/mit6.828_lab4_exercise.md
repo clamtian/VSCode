@@ -632,3 +632,178 @@ fork(void)
 
 写时复制的总流程已在理论部分分析过了。至此，Lab4的part B的写时复制就完成了。
 
+# Exercise 13
+
+> Modify `kern/trapentry.S` and `kern/trap.c` to initialize the appropriate entries in the IDT and provide handlers for IRQs 0 through 15. Then modify the code in `env_alloc()` in `kern/env.c` to ensure that user environments are always run with interrupts enabled.
+> 
+> Also uncomment the sti instruction in `sched_halt()` so that idle CPUs unmask interrupts.
+> 
+> The processor never pushes an error code when invoking a hardware interrupt handler. You might want to re-read section 9.2 of the 80386 Reference Manual, or section 5.8 of the IA-32 Intel Architecture Software Developer's Manual, Volume 3, at this time.
+> 
+> After doing this exercise, if you run your kernel with any test program that runs for a non-trivial length of time (e.g., spin), you should see the kernel print trap frames for hardware interrupts. While interrupts are now enabled in the processor, JOS isn't yet handling them, so you should see it misattribute each interrupt to the currently running user environment and destroy it. Eventually it should run out of environments to destroy and drop into the monitor.
+
+注意这里必须要全部将istrap值设为0。因为JOS中的这个istrap设为1就会在开始处理中断时将FL_IF置为1，而设为0则保持FL_IF不变，设为0才能通过trap()中对FL_IF的检查。
+
+```javascript
+
+//kern/trap.c/trap_init()
+
+	...
+	void handler32();
+	void handler33();
+	void handler36();
+	void handler39();
+	void handler46();
+	void handler51();
+	// IRQ
+	SETGATE(idt[IRQ_TIMER + IRQ_OFFSET], 0, GD_KT, handler32, 0);
+	SETGATE(idt[IRQ_KBD + IRQ_OFFSET], 0, GD_KT, handler33, 0);
+	SETGATE(idt[IRQ_SERIAL + IRQ_OFFSET], 0, GD_KT, handler36, 0);
+	SETGATE(idt[IRQ_SPURIOUS + IRQ_OFFSET], 0, GD_KT, handler39, 0);
+	SETGATE(idt[IRQ_IDE + IRQ_OFFSET], 0, GD_KT, handler46, 0);
+	SETGATE(idt[IRQ_ERROR + IRQ_OFFSET], 0, GD_KT, handler51, 0);
+	...
+
+//trapentry.S
+
+	...
+	TRAPHANDLER_NOEC(handler32, IRQ_OFFSET + IRQ_TIMER)
+	TRAPHANDLER_NOEC(handler33, IRQ_OFFSET + IRQ_KBD)
+	TRAPHANDLER_NOEC(handler36, IRQ_OFFSET + IRQ_SERIAL)
+	TRAPHANDLER_NOEC(handler39, IRQ_OFFSET + IRQ_SPURIOUS)
+	TRAPHANDLER_NOEC(handler46, IRQ_OFFSET + IRQ_IDE)
+	TRAPHANDLER_NOEC(handler51, IRQ_OFFSET + IRQ_ERROR)
+	...
+
+```
+
+然后修改`kern/env.c/env_alloc()`里的代码，确保始终在启用中断的情况下运行用户环境。
+
+```javascript
+
+	···
+	// Enable interrupts while in user mode.
+	// LAB 4: Your code here.
+	e->env_tf.tf_eflags |= FL_IF;
+	···
+
+```
+
+# Exercise 14
+
+> Modify the kernel's `trap_dispatch()` function so that it calls `sched_yield()` to find and run a different environment whenever a clock interrupt takes place.
+> 
+> You should now be able to get the `user/spin` test to work: the parent environment should fork off the child, `sys_yield()` to it a couple times but in each case regain control of the CPU after one time slice, and finally kill the child environment and terminate gracefully.
+
+修改`trap_dispatch`函数，当发生时钟中断时调用`sched_yield`函数来调度下一个进程。
+
+```javascript
+
+	...
+	// Handle clock interrupts. Don't forget to acknowledge the
+	// interrupt using lapic_eoi() before calling the scheduler!
+	// LAB 4: Your code here.
+	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
+		lapic_eoi();
+		sched_yield();
+		return;
+	}
+	...
+
+```
+
+然而到这里之后再运行`make grade`，我一直无法通过`trap()`中的`assert(!(read_eflags() & FL_IF))`这条语句;后来发现是在设置页面错误中断门描述符的时候istrap参数设成了1，`SETGATE(idt[T_PGFLT], 1, GD_KT, pgflt_handler, 0)`；陷阱门是不会重置FL_IF位的，导致内核态下中断没关。
+
+# Exercise 15
+
+> Implement `sys_ipc_recv` and `sys_ipc_try_send` in `kern/syscall.c`. Read the comments on both before implementing them, since they have to work together. When you call `envid2env` in these routines, you should set the checkperm flag to 0, meaning that any environment is allowed to send IPC messages to any other environment, and the kernel does no special permission checking other than verifying that the target envid is valid.
+>
+> Then implement the `ipc_recv` and `ipc_send` functions in `lib/ipc.c`.
+>
+> Use the `user/pingpong` and `user/primes` functions to test your IPC mechanism. `user/primes` will generate for each prime number a new environment until JOS runs out of environments. You might find it interesting to read `user/primes.c` to see all the forking and IPC going on behind the scenes.
+
+完成IPC功能，别忘记在syscall里面分发加新增的两个系统调用。需要注意的是因为`sys_ipc_recv`如果成功是没有返回值的，所以我们需要在`sys_ipc_try_send`中为其设置返回值。
+
+```javascript
+static int
+sys_ipc_recv(void *dstva)
+{
+	// LAB 4: Your code here.
+
+	if (dstva < (void *)UTOP && PGOFF(dstva)) return -E_INVAL;
+	curenv->env_ipc_recving = 1;
+	curenv->env_ipc_dstva = dstva;
+	curenv->env_status = ENV_NOT_RUNNABLE;
+	sys_yield();
+	//panic("sys_ipc_recv not implemented");
+	return 0;
+}
+
+static int
+sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
+{
+	// LAB 4: Your code here.
+	struct Env* e;
+	int r;
+	if ((r = envid2env(envid, &e, 0)) < 0)
+		return -E_BAD_ENV;
+	if (!e->env_ipc_recving)
+		return -E_IPC_NOT_RECV;
+	if (srcva < (void *)UTOP) {
+		if (PGOFF(srcva)) return -E_INVAL;
+		if ((perm & PTE_U) == 0 || (perm & PTE_P) == 0)
+            return -E_INVAL;
+    	if ((perm & ~(PTE_U | PTE_P | PTE_W | PTE_AVAIL)) != 0)
+            return -E_INVAL;
+		pte_t *pte;
+		struct PageInfo *p = page_lookup(curenv->env_pgdir, srcva, &pte);
+		if (!p) return -E_INVAL;
+		if((perm & PTE_W) && !(*pte & PTE_W))
+			return -E_INVAL;
+		if (e->env_ipc_dstva < (void *)UTOP) {
+			if ((r = page_insert(e->env_pgdir, p, e->env_ipc_dstva, perm)) < 0) 
+				return -E_NO_MEM;
+			e->env_ipc_perm = perm;
+		}
+	}
+	e->env_ipc_recving = 0;
+	e->env_ipc_from = curenv->env_id;
+	e->env_ipc_value = value;
+	e->env_status = ENV_RUNNABLE;
+	e->env_tf.tf_regs.reg_eax=0;
+
+	return 0;
+}
+
+void
+ipc_send(envid_t to_env, uint32_t val, void *pg, int perm)
+{
+	// LAB 4: Your code here.
+	if (!pg) pg = (void *)UTOP;
+	int r;
+	while ((r = sys_ipc_try_send(to_env, val, pg, perm))) {
+		if (r != -E_IPC_NOT_RECV) panic("ipc_send error %e", r);
+		sys_yield();
+	}
+}
+
+int32_t
+ipc_recv(envid_t *from_env_store, void *pg, int *perm_store)
+{
+	// LAB 4: Your code here.
+	if (!pg || pg > (void *)UTOP) pg = (void *)UTOP;
+	int t = sys_ipc_recv(pg);
+	if (!t) {
+		if (from_env_store) *from_env_store = thisenv->env_ipc_from;
+		if (perm_store) *perm_store = thisenv->env_ipc_perm; 
+	} else {
+		if (from_env_store) *from_env_store = 0;
+		if (perm_store) *perm_store = 0; 
+		return t;
+	}
+	
+	return thisenv->env_ipc_value;
+}
+```
+
+至此，lab4的全部内容已经完成。
