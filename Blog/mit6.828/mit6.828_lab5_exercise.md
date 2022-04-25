@@ -1,83 +1,112 @@
 # Exercise 1
-> Implement `mmio_map_region` in `kern/pmap.c`. To see how this is used, look at the beginning of `lapic_init` in `kern/lapic.c`. You'll have to do the next exercise, too, before the tests for `mmio_map_region` will run.
+> `i386_init` identifies the file system environment by passing the type `ENV_TYPE_FS` to your environment creation function, `env_create`. Modify `env_create` in `env.c`, so that it gives the file system environment I/O privilege, but never gives that privilege to any other environment.
+>
+> Make sure you can start the file environment without causing a General Protection fault. You should pass the "fs i/o" test in make grade.
 
 ```Javascript
-void *
-mmio_map_region(physaddr_t pa, size_t size)
-{
-	static uintptr_t base = MMIOBASE;
-
-	physaddr_t pa_begin = ROUNDDOWN(pa, PGSIZE);
-	physaddr_t pa_end = ROUNDUP(pa + size, PGSIZE);
-	if (pa_end - pa_begin >= MMIOLIM - MMIOBASE) {
-	    panic("mmio_map_region: requesting size too large.\n");
-	}
-	size = pa_end - pa_begin;
-	boot_map_region(kern_pgdir, base, size, pa_begin, PTE_W | PTE_PCD | PTE_PWT);
-	void *ret = (void *)base;
-	base += size;
-	return ret;
-}
-```
-
-# Exercise 2
-> Read `boot_aps()` and `mp_main()` in `kern/init.c`, and the assembly code in `kern/mpentry.S`. Make sure you understand the control flow transfer during the bootstrap of APs. Then modify your implementation of `page_init()` in `kern/pmap.c` to avoid adding the page at `MPENTRY_PADDR` to the free list, so that we can safely copy and run AP bootstrap code at that physical address. Your code should pass the updated `check_page_free_list()` test (but might fail the updated `check_kern_pgdir()` test, which we will fix soon).
-
-修改 `kern/pmap.c`中的`page_init()`使其不要将 `MPENTRY_PADDR`(0x7000)这一页加入到`page_free_list`。
-
-```javaScript
 void
-page_init(void)
+env_create(uint8_t *binary, enum EnvType type)
 {
-	size_t i;
-	page_free_list = NULL;
-	pages[0].pp_ref = 1;
-	pages[0].pp_link = NULL;
-	size_t index_IOhole_begin = npages_basemem;
-	size_t index_alloc_end = PADDR(boot_alloc(0)) / PGSIZE;
+	struct Env *e;
+	int res = env_alloc(&e, 0);
+	if(res < 0) panic("load 1st env failed!\n");
+	e->env_type = type;
+	load_icode(e, binary);
 
-	for (i = 1; i < npages; i++) {
-		if((i >= index_IOhole_begin && i < index_alloc_end) || (i == MPENTRY_PADDR / PGSIZE)){
-			pages[i].pp_ref = 1;
-			pages[i].pp_link = NULL;
-		}else{
-			pages[i].pp_ref = 0;
-			pages[i].pp_link = page_free_list;
-			page_free_list = &pages[i];
-		}
-	}
+	// If this is the file server (type == ENV_TYPE_FS) give it I/O privileges.
+	// LAB 5: Your code here.
+	if (type == ENV_TYPE_FS) 
+		e->env_tf.tf_eflags |= FL_IOPL_MASK;
 }
 ```
 
 ## Question
 
-> Compare `kern/mpentry.S` side by side with `boot/boot.S`. Bearing in mind that `kern/mpentry.S` is compiled and linked to run above `KERNBASE` just like everything else in the kernel, what is the purpose of macro `MPBOOTPHYS`? Why is it necessary in `kern/mpentry.S` but not in `boot/boot.S`? In other words, what could go wrong if it were omitted in `kern/mpentry.S`?
->
-> Hint: recall the differences between the link address and the load address that we have discussed in Lab 1.
+> Do you have to do anything else to ensure that this I/O privilege setting is saved and restored properly when you subsequently switch from one environment to another? Why?
 
- 这是因为`mpentry.S`代码中`mpentry_start`和`mpentry_end`的地址都在`KERNBASE`(0xf0000000）之上，实模式无法寻址，而我们将`mpentry.S`加载到了0x7000处，所以需要通过`MPBOOTPHYS`来寻址。而`boot.S`加载的位置本身就是实模式可寻址的低地址，所以不用额外转换。
+不需要做额外处理。不同进程有自己的Trapframe，互不影响。
+
+# Exercise 2
+> Implement the `bc_pgfault` and `flush_block` functions in `fs/bc.c`. `bc_pgfault` is a page fault handler, just like the one your wrote in the previous lab for copy-on-write fork, except that its job is to load pages in from the disk in response to a page fault. When writing this, keep in mind that (1) addr may not be aligned to a block boundary and (2) `ide_read` operates in sectors, not blocks.
+>
+> The `flush_block` function should write a block out to disk if necessary. `flush_block` shouldn't do anything if the block isn't even in the block cache (that is, the page isn't mapped) or if it's not dirty. We will use the VM hardware to keep track of whether a disk block has been modified since it was last read from or written to disk. To see whether a block needs writing, we can just look to see if the PTE_D "dirty" bit is set in the uvpt entry. (The PTE_D bit is set by the processor in response to a write to that page; see 5.2.4.3 in chapter 5 of the 386 reference manual.) After writing the block to disk, `flush_block` should clear the PTE_D bit using `sys_page_map`.
+>
+> Use make grade to test your code. Your code should pass "`check_bc`", "`check_super`", and "`check_bitmap`".
+
+实现 `fs/bc.c` 中的 `bc_pgfault` 和 `flush_block`。注意这里`flush_block`中的`sys_page_map`使用的权限用 PTE_SYSCALL。
+
+```javaScript
+static void
+bc_pgfault(struct UTrapframe *utf)
+{
+	void *addr = (void *) utf->utf_fault_va;
+	uint32_t blockno = ((uint32_t)addr - DISKMAP) / BLKSIZE;
+	int r;
+
+	// Check that the fault was within the block cache region
+	if (addr < (void*)DISKMAP || addr >= (void*)(DISKMAP + DISKSIZE))
+		panic("page fault in FS: eip %08x, va %08x, err %04x",
+		      utf->utf_eip, addr, utf->utf_err);
+
+	// Sanity check the block number.
+	if (super && blockno >= super->s_nblocks)
+		panic("reading non-existent block %08x\n", blockno);
+
+	// Allocate a page in the disk map region, read the contents
+	// of the block from the disk into that page.
+	// Hint: first round addr to page boundary. fs/ide.c has code to read
+	// the disk.
+	//
+	// LAB 5: you code here:
+	addr = (void*)ROUNDDOWN(addr, BLKSIZE);
+	if ((r = sys_page_alloc(0, addr, PTE_U | PTE_W | PTE_P)))
+		panic("bc_pagefault, sys_page_alloc:%e", r);
+	if ((r = ide_read(blockno * BLKSECTS, addr, BLKSECTS)))
+		panic("bc_pagefault, ide_read:%e", r);
+	// Clear the dirty bit for the disk block page since we just read the
+	// block from disk
+	if ((r = sys_page_map(0, addr, 0, addr, uvpt[PGNUM(addr)] & PTE_SYSCALL)) < 0)
+		panic("in bc_pgfault, sys_page_map: %e", r);
+	
+	// Check that the block we read was allocated. (exercise for
+	// the reader: why do we do this *after* reading the block
+	// in?)
+	if (bitmap && block_is_free(blockno))
+		panic("reading free block %08x\n", blockno);
+}
+```
 
 # Exercise 3
 
-> Modify `mem_init_mp()` (in `kern/pmap.c`) to map per-CPU stacks starting at `KSTACKTOP`, as shown in `inc/memlayout.h`. The size of each stack is `KSTKSIZE` bytes plus `KSTKGAP` bytes of unmapped guard pages. Your code should pass the new check in `check_kern_pgdir()`.
+> Use `free_block` as a model to implement `alloc_block` in `fs/fs.c`, which should find a free disk block in the bitmap, mark it used, and return the number of that block. When you allocate a block, you should immediately flush the changed bitmap block to disk with flush_block, to help file system consistency.
+>
+> Use make grade to test your code. Your code should now pass "`alloc_block`".
 
-修改 `mem_mp_init()`为每个cpu分配内核栈。注意，CPU内核栈之间有空白`KSTKGAP`(32KB)，其目的是为了避免一个CPU的内核栈覆盖另外一个CPU的内核栈，空出来这部分可以在栈溢出时报错。
+使用`free_block`作为参考实现`alloc_block`。
 
 ```javascript
-static void
-mem_init_mp(void)
+int
+alloc_block(void)
 {
 	int i;
-	for(i = 0; i < NCPU; ++i){
-		uintptr_t kstacktop_i = KSTACKTOP - i * (KSTKSIZE + KSTKGAP);
-		boot_map_region(kern_pgdir, 
-						kstacktop_i - KSTKSIZE, 
-						KSTKSIZE, 
-						(physaddr_t)PADDR(&percpu_kstacks[i]), 
-						PTE_P | PTE_W);
+	for (i = 3; i < super->s_nblocks; ++i) {
+		if (block_is_free(i)) {
+			bitmap[i / 32] &= ~(1 << (i % 32));
+			flush_block(diskaddr(i));
+			return i;
+		}
 	}
+	
+	//panic("alloc_block not implemented");
+	return -E_NO_DISK;
 }
 ```
+
+
+
+
+
+
 
 # Exercise 4
 
