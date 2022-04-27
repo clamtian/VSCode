@@ -102,165 +102,132 @@ alloc_block(void)
 }
 ```
 
-
-
-
-
-
-
 # Exercise 4
 
-> The code in `trap_init_percpu()` (`kern/trap.c`) initializes the TSS and TSS descriptor for the BSP. It worked in Lab 3, but is incorrect when running on other CPUs. Change the code so that it can work on all CPUs. (Note: your new code should not use the global ts variable any more.)
-
-修改`trap_init_percpu()`，完成每个CPU的TSS初始化。设置ts_esp0和ts_ss0，注意，设置全局描述符的时候加上cpu_id作为索引值，ltr时要注意是加载的描述符的偏移值，所以记得cpu_id<<3。
+>  Implement `file_block_walk` and `file_get_block`. `file_block_walk` maps from a block offset within a file to the pointer for that block in the struct File or the indirect block, very much like what `pgdir_walk` did for page tables. `file_get_block` goes one step further and maps to the actual disk block, allocating a new one if necessary.
+>
+> Use make grade to test your code. Your code should pass "`file_open`", "`file_get_block`", and "`file_flush/file_truncated/file rewrite`", and "`testfile`".
 
 ```javascript
-void
-trap_init_percpu(void)
+static int
+file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool alloc)
 {
-	int id = thiscpu->cpu_id;
-	thiscpu->cpu_ts.ts_esp0 = KSTACKTOP - (KSTKSIZE + KSTKGAP) * id;
-	thiscpu->cpu_ts.ts_ss0 = GD_KD;
-	thiscpu->cpu_ts.ts_iomb = sizeof(struct Taskstate);
+        // LAB 5: Your code here.
+	    if (filebno >= NDIRECT + NINDIRECT) return -E_INVAL;
+	    if (filebno < NDIRECT) {
+			*ppdiskbno = f->f_direct + filebno;
+		} else {
+			if (!f->f_indirect) {
+				if (!alloc) return -E_NOT_FOUND;
+				int blockno = alloc_block();
+				if (blockno < 0) return -E_NO_DISK;
+				f->f_indirect = blockno;
+				memset(diskaddr(blockno), 0, BLKSIZE);
+				flush_block(diskaddr(blockno));
+			}
+			*ppdiskbno = (uint32_t *)diskaddr(f->f_indirect) + (filebno - NDIRECT);
+		}
+		return 0;
+}
 
-	gdt[(GD_TSS0 >> 3) + id] = SEG16(STS_T32A, (uint32_t) (&thiscpu->cpu_ts),
-					sizeof(struct Taskstate) - 1, 0);
-	gdt[(GD_TSS0 >> 3) + id].sd_s = 0;
-	ltr(GD_TSS0 + (id << 3));
-
-	lidt(&idt_pd);
+int
+file_get_block(struct File *f, uint32_t filebno, char **blk)
+{
+        // LAB 5: Your code here.
+	    uint32_t *ppdiskbno;
+	    int r;
+		if ((r = file_block_walk(f, filebno, &ppdiskbno, 1)))
+	   		return r;
+		if (*ppdiskbno == 0) {
+			if ((r = alloc_block()) < 0) return r;
+			*ppdiskbno = r;
+			memset(diskaddr(r), 0, BLKSIZE);
+			flush_block(diskaddr(r));
+		}
+		*blk = diskaddr(*ppdiskbno);
+		return 0;
 }
 ```
 
 # Exercise 5
 
-> Apply the big kernel lock as described above, by calling `lock_kernel()` and `unlock_kernel()` at the proper locations.
+> Implement `serve_read` in `fs/serv.c`.
+>
+> `serve_read`'s heavy lifting will be done by the already-implemented `file_read` in `fs/fs.c` (which, in turn, is just a bunch of calls to `file_get_block`). `serve_read` just has to provide the RPC interface for file reading. Look at the comments and code in `serve_set_size` to get a general idea of how the server functions should be structured.
+>
+> Use make grade to test your code. Your code should pass "`serve_open/file_stat/file_close`" and "`file_read`" for a score of 70/150.
+
+具体内容已经在理论篇中分析过。
 
 ```javascript
-// 加锁位置1 i386_init()的 boot_aps()函数前。
-	...
+int
+serve_read(envid_t envid, union Fsipc *ipc)
+{
+	struct Fsreq_read *req = &ipc->read;
+	struct Fsret_read *ret = &ipc->readRet;
 
-    lock_kernel();
- 
-    // Starting non-boot CPUs
-    boot_aps();
+	if (debug)
+		cprintf("serve_read %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
 
-	...
-
-// 加锁位置2 mp_main()的函数末尾，这里还要加上 sched_yield()。
-	...
-
-    lock_kernel();
-	sched_yield();
-
-	...
-
-// 加锁位置3 trap()里面
-	...
-
-    lock_kernel();
-    assert(curenv);
-    
-	...            
-// 释放锁
-	...
-
-    lcr3(PADDR(curenv->env_pgdir));
-    unlock_kernel();
-    env_pop_tf(&curenv->env_tf);
-
-	...
+	// Lab 5: Your code here:
+	struct OpenFile *o;
+	int r;
+	if ((r = openfile_lookup(envid, req->req_fileid, &o)) < 0)
+		return r;
+	if ((r = file_read(o->o_file, ret->ret_buf, ipc->read.req_n, o->o_fd->fd_offset)) < 0)
+		return r;
+	o->o_fd->fd_offset += r;
+	return r;
+}
 ```
-
-## Question
-
-> It seems that using the big kernel lock guarantees that only one CPU can run the kernel code at a time. Why do we still need separate kernel stacks for each CPU? Describe a scenario in which using a shared kernel stack will go wrong, even with the protection of the big kernel lock.
-
-这是因为虽然内核锁限制了多个进程同时执行内核代码，但是在陷入`trap()`之前，CPU硬件已经自动压栈了SS, ESP, EFLAGS, CS, EIP等寄存器内容，而且在`trapentry.S`中也压入了错误码和中断号到内核栈中，所以不同CPU必须分开内核栈，否则多个CPU同时陷入内核时会破坏栈结构，此时都还没有进入到`trap()`的加内核锁位置。
 
 # Exercise 6
 
-> Implement round-robin scheduling in `sched_yield()` as described above. Don't forget to modify `syscall()` to dispatch `sys_yield()`.
-> 
-> Make sure to invoke `sched_yield()` in mp_main.
-> 
-> Modify `kern/init.c` to create three (or more!) environments that all run the program `user/yield.c`.
-> 
-> Run make qemu. You should see the environments switch back and forth between each other five times before terminating, like below.
-> 
-> Test also with several CPUS: `make qemu CPUS=2`.
-> 
-> ```
-> Hello, I am environment 00001000.
-> Hello, I am environment 00001001.
-> Hello, I am environment 00001002.
-> Back in environment 00001000, iteration 0.
-> Back in environment 00001001, iteration 0.
-> Back in environment 00001002, iteration 0.
-> Back in environment 00001000, iteration 1.
-> Back in environment 00001001, iteration 1.
-> Back in environment 00001002, iteration 1.
-> ```
-> After the yield programs exit, there will be no runnable environment in the system, the scheduler should invoke the JOS kernel monitor. If any of this does not happen, then fix your code before proceeding.
-
-实现轮转调度。另外还要修改`kern/syscall.c`加入对 `SYS_yield` 的支持，并在`kern/init.c`中加载3个`user_yield`进程测试。
+>  Implement `serve_write` in `fs/serv.c` and `devfile_write` in `lib/file.c`.
+>
+> Use make grade to test your code. Your code should pass "`file_write`", "`file_read after file_write`", "`open`", and "`large file`" for a score of 90/150.
 
 ```javascript
-void
-sched_yield(void)
+int
+serve_write(envid_t envid, struct Fsreq_write *req)
 {
-	struct Env *idle;
-	idle = curenv;
-	int idx = idle ? ENVX(idle->env_id) : -1;
+	if (debug)
+		cprintf("serve_write %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
 
-	int i;
-	for(i = idx + 1; i < NENV; i++){
-		if(envs[i].env_status == ENV_RUNNABLE){
-			env_run(&envs[i]);
-		}
-	}
-	for(i = 0; i <= idx; i++){
-		if(envs[i].env_status == ENV_RUNNABLE){
-			env_run(&envs[i]);
-		}
-	}
-	if(idle && idle->env_status == ENV_RUNNING) {
-		env_run(idle);
-	}
-
-	sched_halt();
+	// LAB 5: Your code here.
+	struct OpenFile *o;
+	int r;
+	if ((r = openfile_lookup(envid, req->req_fileid, &o)) < 0)
+		return r;
+	if ((r = file_write(o->o_file, req->req_buf, req->req_n, o->o_fd->fd_offset)) < 0)
+		return r;
+	o->o_fd->fd_offset += r;
+	return r;
 }
 
-// kern/syscall.c修改
-	...
-	
-	case SYS_yield:
-        sys_yield();
-        return 0;
-   
-    ...
-
-// 修改测试进程     
-	...
-
-    // Touch all you want.
-    ENV_CREATE(user_primes, ENV_TYPE_USER);
-    // ENV_CREATE(user_primes, ENV_TYPE_USER);
-    ENV_CREATE(user_yield, ENV_TYPE_USER);
-    ENV_CREATE(user_yield, ENV_TYPE_USER);
-    ENV_CREATE(user_yield, ENV_TYPE_USER);
-	
-	...
+static ssize_t
+devfile_write(struct Fd *fd, const void *buf, size_t n)
+{
+	fsipcbuf.write.req_fileid = fd->fd_file.id;
+    fsipcbuf.write.req_n = MIN(n, PGSIZE);
+    memmove(fsipcbuf.write.req_buf, buf, fsipcbuf.write.req_n);
+    int r = fsipc(FSREQ_WRITE, NULL);
+    return r;
+}
 ```
 
-## Question
-> In your implementation of `env_run()` you should have called `lcr3()`. Before and after the call to `lcr3()`, your code makes references (at least it should) to the variable e, the argument to `env_run`. Upon loading the %cr3 register, the addressing context used by the MMU is instantly changed. But a virtual address (namely e) has meaning relative to a given address context--the address context specifies the physical address to which the virtual address maps. Why can the pointer e be dereferenced both before and after the addressing switch?
 
-这是因为所有的进程`env_pgdir`的高地址的映射跟`kern_pgdir`的是一样的，见实验3的`env_setup_vm()`。
 
-> Whenever the kernel switches from one environment to another, it must ensure the old environment's registers are saved so they can be restored properly later. Why? Where does this happen?
 
-当然要保存寄存器状态，以知道下一条指令地址以及进程栈的状态，不然我们不知道从哪里继续运行。保存寄存器状态的代码是 `trap.c` 中的 `curenv->env_tf = *tf`。
+
+
+
+
+
+
+
+
+
 
 # Exercise 7
 

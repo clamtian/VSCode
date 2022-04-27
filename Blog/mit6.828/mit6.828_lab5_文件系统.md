@@ -81,6 +81,315 @@ struct File中的f_direct数组包含存储文件前10个(NDIRECT)块的块号�
 
 ## 2.3 文件操作
 
+关于文件操作相关的几个结构体要说明下：
+
+* `struct File` 用于存储文件元数据，前面提到过。
+
+* `struct Fd` 用于文件模拟层，类似文件描述符，如文件ID，文件打开模式，文件偏移都存储在Fd中。一个进程同时最多打开 MAXFD(32) 个文件。
+
+* 文件系统进程还维护了一个打开文件的描述符表，即opentab数组，数组元素为 `struct OpenFile`。OpenFile结构体用于存储打开文件信息，包括文件ID，struct File以及struct Fd。JOS同时打开的文件数一共为 MAXOPEN(1024) 个。
+
+* 还有`union Fsipc`，文件系统中客户端和服务端通过IPC进行通信，通信的数据格式就是`union Fsipc`，它里面的每一个成员对应一种文件系统的操作请求。每次客户端发来请求，都会将参数放入一个`union Fsipc`映射的物理页到服务端。同时服务端还会将处理后的结果放入到Fsipc内，传递给客户端。
+
+```javascript
+//inc/fs.h
+struct File {
+	char f_name[MAXNAMELEN];	// filename
+	off_t f_size;			// file size in bytes
+	uint32_t f_type;		// file type
+
+	// Block pointers.
+	// A block is allocated iff its value is != 0.
+	uint32_t f_direct[NDIRECT];	// direct blocks
+	uint32_t f_indirect;		// indirect block
+
+	// Pad out to 256 bytes; must do arithmetic in case we're compiling
+	// fsformat on a 64-bit machine.
+	uint8_t f_pad[256 - MAXNAMELEN - 8 - 4*NDIRECT - 4];
+} __attribute__((packed));	// required only on some 64-bit machines
+
+
+//inc/fd.h
+struct Fd {
+	int fd_dev_id;
+	off_t fd_offset;
+	int fd_omode;
+	union {
+		// File server files
+		struct FdFile fd_file;
+	};
+};
+
+
+//fs/serv.c
+struct OpenFile {
+	uint32_t o_fileid;	// file id
+	struct File *o_file;	// mapped descriptor for open file
+	int o_mode;		// open mode
+	struct Fd *o_fd;	// Fd page
+};
+
+
+//inc/fs.h
+union Fsipc {
+	struct Fsreq_open {
+		char req_path[MAXPATHLEN];
+		int req_omode;
+	} open;
+	struct Fsreq_set_size {
+		int req_fileid;
+		off_t req_size;
+	} set_size;
+	struct Fsreq_read {
+		int req_fileid;
+		size_t req_n;
+	} read;
+	struct Fsret_read {
+		char ret_buf[PGSIZE];
+	} readRet;
+	struct Fsreq_write {
+		int req_fileid;
+		size_t req_n;
+		char req_buf[PGSIZE - (sizeof(int) + sizeof(size_t))];
+	} write;
+	struct Fsreq_stat {
+		int req_fileid;
+	} stat;
+	struct Fsret_stat {
+		char ret_name[MAXNAMELEN];
+		off_t ret_size;
+		int ret_isdir;
+	} statRet;
+	struct Fsreq_flush {
+		int req_fileid;
+	} flush;
+	struct Fsreq_remove {
+		char req_path[MAXPATHLEN];
+	} remove;
+
+	// Ensure Fsipc is one page
+	char _pad[PGSIZE];
+};
+```
+
+在 `fs/fs.c` 中还有很多文件操作相关的函数:
+
+* file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool alloc)
+
+  这个函数是查找文件第filebno块的数据块的地址，查到的地址存储在 ppdiskbno 中。注意这里要检查间接块，如果alloc为1且寻址的块号>=NDIRECT，而间接块没有分配的话需要分配一个间接块。
+
+* file_get_block(struct File *f, uint32_t filebno, char **blk)
+
+  查找文件第filebno块的块地址，并将块地址在虚拟内存中映射的地址存储在 blk 中(即将diskaddr(blockno)存到blk中)。
+
+* dir_lookup(struct File *dir, const char *name, struct File **file)
+
+  在目录dir中查找名为name的文件，如果找到了设置*file为找到的文件。因为目录的数据块存储的是struct File列表，可以据此来查找文件。
+
+* file_open(const char *path, struct File **pf)
+
+  打开文件，设置*pf为查找到的文件指针。
+
+* file_create(const char *path, struct File *pf)
+  创建路径/文件，在pf存储创建好的文件指针。
+
+* file_read(struct File *f, void *buf, size_t count, off_t offset)
+
+  从文件的offset处开始读取count个字节到buf中，返回实际读取的字节数。
+
+* file_write(struct File *f, const void *buf, size_t count, off_t offset)
+
+  从文件offset处开始写入buf中的count字节，返回实际写入的字节数。
+
+文件服务端进行的地址空间布局如下(图源自[bysui](https://blog.csdn.net/bysui/article/details/51868917)：
+
+![avatar](image/lab5_file_server_layout.png)
+
+通过IPC来实现JOS的文件系统操作的流程图如下所示：
+
+```javascript
+ Regular env           FS env
+   +---------------+   +---------------+
+   |      read     |   |   file_read   |
+   |   (lib/fd.c)  |   |   (fs/fs.c)   |
+...|.......|.......|...|.......^.......|...............
+   |       v       |   |       |       | RPC mechanism
+   |  devfile_read |   |  serve_read   |
+   |  (lib/file.c) |   |  (fs/serv.c)  |
+   |       |       |   |       ^       |
+   |       v       |   |       |       |
+   |     fsipc     |   |     serve     |
+   |  (lib/file.c) |   |  (fs/serv.c)  |
+   |       |       |   |       ^       |
+   |       v       |   |       |       |
+   |   ipc_send    |   |   ipc_recv    |
+   |       |       |   |       ^       |
+   +-------|-------+   +-------|-------+
+           |                   |
+           +-------------------+
+```
+
+以read为例来看下整个操作的流程图：
+
+首先客户端调用`open`通过文件描述符打开文件，先通过 `fd_alloc()` 分配一个文件描述符，然后在文件描述符fd 处接收fs进程的IPC页，分配的fd的地址为 (0xD0000000 + i * PGSIZE)。
+
+然后调用`read`：
+
+```javascript
+ssize_t
+read(int fdnum, void *buf, size_t n)
+{
+	int r;
+	struct Dev *dev;
+	struct Fd *fd;
+
+	if ((r = fd_lookup(fdnum, &fd)) < 0
+	    || (r = dev_lookup(fd->fd_dev_id, &dev)) < 0)
+		return r;
+	if ((fd->fd_omode & O_ACCMODE) == O_WRONLY) {
+		cprintf("[%08x] read %d -- bad mode\n", thisenv->env_id, fdnum);
+		return -E_INVAL;
+	}
+	if (!dev->dev_read)
+		return -E_NOT_SUPP;
+	return (*dev->dev_read)(fd, buf, n);
+}
+```
+`read`函数根据fdnum在内存空间0xD0000000以上找到相应的`struct Fd`页面，将fd指针指向该页面，页面内保存着一个`open file`的基本信息。然后根据fd内的`fd_dev_id`找到对应设备dev，很明显这里是devfile，然后调用(*devfile->dev_read)(fd, buf, n)。该函数返回读到的字节总数:
+
+```javascript
+static ssize_t
+devfile_read(struct Fd *fd, void *buf, size_t n)
+{
+	// Make an FSREQ_READ request to the file system server after
+	// filling fsipcbuf.read with the request arguments.  The
+	// bytes read will be written back to fsipcbuf by the file
+	// system server.
+	int r;
+
+	fsipcbuf.read.req_fileid = fd->fd_file.id;
+	fsipcbuf.read.req_n = n;
+	if ((r = fsipc(FSREQ_READ, NULL)) < 0)
+		return r;
+	assert(r <= n);
+	assert(r <= PGSIZE);
+	memmove(buf, fsipcbuf.readRet.ret_buf, r);
+	return r;
+}
+```
+
+`devfile_read`函数在IPC共享的页面上的`union Fsipc`中存储请求的参数。在客户端，我们总是在fsipcbuf共享页面。设置好fsipcbuf的参数，调用fsipc去向服务器端发送read请求。请求成功后结果也是保存在共享页面fsipcbuf中，然后读到指定的buf就行。
+
+```javascript
+static int
+fsipc(unsigned type, void *dstva)
+{
+	static envid_t fsenv;
+	if (fsenv == 0)
+		fsenv = ipc_find_env(ENV_TYPE_FS);
+
+	static_assert(sizeof(fsipcbuf) == PGSIZE);
+
+	if (debug)
+		cprintf("[%08x] fsipc %d %08x\n", thisenv->env_id, type, *(uint32_t *)&fsipcbuf);
+
+	ipc_send(fsenv, type, &fsipcbuf, PTE_P | PTE_W | PTE_U);
+	return ipc_recv(NULL, dstva, NULL);
+}
+```
+
+`fsipc`函数就是负责跟文件系统server进程间通信的。发送请求并接受结果。通过`ipc_send`向文件服务端发送请求，然后运行`ipc_recv`等待文件服务端返回的请求结果。
+
+```javascript
+void
+serve(void)
+{
+	uint32_t req, whom;
+	int perm, r;
+	void *pg;
+
+	while (1) {
+		perm = 0;
+		req = ipc_recv((int32_t *) &whom, fsreq, &perm);
+		if (debug)
+			cprintf("fs req %d from %08x [page %08x: %s]\n",
+				req, whom, uvpt[PGNUM(fsreq)], fsreq);
+
+		// All requests must contain an argument page
+		if (!(perm & PTE_P)) {
+			cprintf("Invalid request from %08x: no argument page\n",
+				whom);
+			continue; // just leave it hanging...
+		}
+
+		pg = NULL;
+		if (req == FSREQ_OPEN) {
+			r = serve_open(whom, (struct Fsreq_open*)fsreq, &pg, &perm);
+		} else if (req < ARRAY_SIZE(handlers) && handlers[req]) {
+			r = handlers[req](whom, fsreq);
+		} else {
+			cprintf("Invalid request code %d from %08x\n", req, whom);
+			r = -E_INVAL;
+		}
+		ipc_send(whom, r, pg, perm);
+		sys_page_unmap(0, fsreq);
+	}
+}
+```
+
+此时文件服务端一直在轮询`ipc_recv`等待客户端的请求，一旦接收到请求，查看ipc_recv的返回值，应该是32位的env_ipc_value，即fsipc里ipc_send过来的type，根据这个type判断进入哪个处理函数，这里很明显type==FSREQ_READ
+
+```javascript
+int
+serve_read(envid_t envid, union Fsipc *ipc)
+{
+	struct Fsreq_read *req = &ipc->read;
+	struct Fsret_read *ret = &ipc->readRet;
+
+	if (debug)
+		cprintf("serve_read %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
+
+	// Lab 5: Your code here:
+	struct OpenFile *o;
+	int r;
+	if ((r = openfile_lookup(envid, req->req_fileid, &o)) < 0)
+		return r;
+	if ((r = file_read(o->o_file, ret->ret_buf, ipc->read.req_n, o->o_fd->fd_offset)) < 0)
+		return r;
+	o->o_fd->fd_offset += r;
+	return r;
+}
+```
+
+`serve_read`函数首先找到ipc->read->req_fileid对应的OpenFile，然后调用file_read去读内容到ipc->readRet->ret_buf
+
+```javascript
+ssize_t
+file_read(struct File *f, void *buf, size_t count, off_t offset)
+{
+	int r, bn;
+	off_t pos;
+	char *blk;
+
+	if (offset >= f->f_size)
+		return 0;
+
+	count = MIN(count, f->f_size - offset);
+
+	for (pos = offset; pos < offset + count; ) {
+		if ((r = file_get_block(f, pos / BLKSIZE, &blk)) < 0)
+			return r;
+		bn = MIN(BLKSIZE - pos % BLKSIZE, offset + count - pos);
+		memmove(buf, blk + pos % BLKSIZE, bn);
+		pos += bn;
+		buf += bn;
+	}
+
+	return count;
+}
+```
+
+`file_read函数`将文件f从offset开始的count个字节读入buf中。但是count可能大于f->f_size-offset，那么最多也只能把文件剩余部分读出。
 
 
 ## 2.4 调用用户页面错误处理函数
