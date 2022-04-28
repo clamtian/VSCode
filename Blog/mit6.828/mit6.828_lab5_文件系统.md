@@ -392,20 +392,13 @@ file_read(struct File *f, void *buf, size_t count, off_t offset)
 `file_read函数`将文件f从offset开始的count个字节读入buf中。但是count可能大于f->f_size-offset，那么最多也只能把文件剩余部分读出。
 
 
-## 2.4 调用用户页面错误处理函数
+## 2.4 Spawning 进程
 
+spawn代码用于创建一个子进程，然后从磁盘中加载一个程序代码镜像并在子进程运行加载的程序。这有点类似Unix的fork+exec，但是又有所不同，因为我们的spawn进程运行在用户空间，我们通过一个新的系统调用 `sys_env_set_trapframe`简化了一些操作。
 
+`Spawn(prog, argv)`会根据路径prog打开文件，从文件中获取二进制映像elf header，然后根据elf header完成其内存空间的加载。主要是要设好agrv[]数组，这样可以设好子环境的用户栈，方便子环境执行时从中获得所需参数。
 
-## 2.5 写时复制总流程
-
-
-
-# 3.抢占式调度和进程间通信
-
-## 3.1 时钟中断
-
-
-## 3.2 进程间通信
+Spawn跟fork的区别是，fork出的子环境跟父环境除了返回值外，上下文跟内存空间都几乎一模一样。而Spawn出的子环境会从文件中加载内存空间，跟父环境完全不一样，而且eip、esp、用户栈都不一样，但是SHARE权限页面是共享的
 
 
 
