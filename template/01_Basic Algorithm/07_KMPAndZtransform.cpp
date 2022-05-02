@@ -57,7 +57,8 @@ vector<int> ZTransform(string& s) {
 }
 
 int main(){
-    string s = "aacecaaaaaacecaa", p = "aacecaaaaaacecaa";
+    string s = "ababc", p = "aacecaaaaaacecaa";
+    auto t = ZTransform(s);
     KMP(s, p);
     return 1;
 }

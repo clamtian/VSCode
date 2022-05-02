@@ -50,33 +50,51 @@ typedef pair<int, int> PII;
 typedef unsigned long long ULL ;
 class Solution {
 public:
-    long long P = 13331;
-    long long sumScores(string s) {
-        long long n = s.size();
-        vector<ULL> h(n + 1), p(n + 1);
-        for (int i = 1; i <= n; ++i){
-            h[i] = h[i - 1] * P + s[i - 1];
-            p[i] = p[i - 1] * P;
-        }
-        long long ans = n;
-        for (int i = 1; i < n; ++i) {
-            int l = i, r = n - 1;
-            while (l < r) {
-                int mid = (l + r + 1) >> 1;
-                ULL v = get(i, mid, h, p);
-                if(v == get(0, mid - i, h, p)) l = mid;
-                else r = mid - 1;
+    vector<int> movesToStamp(string s, string t) {
+        int m = s.size();
+        string p = s + "#" + t;
+        string k = p;
+        reverse(k.begin(), k.begin() + m);
+        reverse(k.rbegin(), k.rbegin() + t.size());
+        int n = p.size();
+        vector<int> z1(n, 0), z2(n, 0);
+        for (int i = 1, l = 0, r = 0; i < n; ++i) {
+            if (i <= r && z1[i - l] < r - i + 1) {
+                z1[i] = z1[i - l];
+            } else {
+                z1[i] = max(0, r - i + 1);
+                while (i + z1[i] < n && p[z1[i]] == p[i + z1[i]]) ++z1[i];
             }
-            if (l != i) ans += l - i + 1;
-            else ans += s[i] == s[0] ? 1 : 0;
-            cout << ans << endl;
+            if (i + z1[i] - 1 > r) l = i, r = i + z1[i] - 1;
         }
-        return ans;
-    }
-
-    // 计算子串 str[l ~ r] 的哈希值 
-    ULL get(int l, int r, vector<ULL>& h, vector<ULL>& p){
-        return h[r + 1] - h[l] * p[r - l + 1];
+        for (int i = 1, l = 0, r = 0; i < n; ++i) {
+            if (i <= r && z2[i - l] < r - i + 1) {
+                z2[i] = z2[i - l];
+            } else {
+                z2[i] = max(0, r - i + 1);
+                while (i + z2[i] < n && k[z2[i]] == k[i + z2[i]]) ++z2[i];
+            }
+            if (i + z2[i] - 1 > r) l = i, r = i + z2[i] - 1;
+        }
+        deque<int> d;
+        int i = 0;
+        while (i < t.size()) {
+            if (z1[i + m + 1]) {
+                d.push_back(i);
+                i += z1[i + m + 1];
+            }  else {
+                int j = i;
+                while (j < t.size() && z2[t.size() - j + m] != j - i + 1) ++j;
+                if (j < t.size() && z2[t.size() - j + m] == j - i + 1) {
+                    d.push_front(j - m + 1);
+                    i = j + 1;
+                } else break;
+            }
+        } 
+        vector<int> res;
+        //if (i < t.size() || d.size() > 10 * t.size()) return res;
+        res = vector<int>(d.begin(), d.end());
+        return res;
     }
 };
 
@@ -136,6 +154,6 @@ int main() {
                                 {"Carla","5","Ceviche"},
                                 {"Rous","3","Ceviche"} };
     Solution so;
-    so.sumScores("ababa");
+    so.movesToStamp("afc", "aafcaafacc");
     return 0;
 }
