@@ -50,51 +50,27 @@ typedef pair<int, int> PII;
 typedef unsigned long long ULL ;
 class Solution {
 public:
-    vector<int> movesToStamp(string s, string t) {
-        int m = s.size();
-        string p = s + "#" + t;
-        string k = p;
-        reverse(k.begin(), k.begin() + m);
-        reverse(k.rbegin(), k.rbegin() + t.size());
-        int n = p.size();
-        vector<int> z1(n, 0), z2(n, 0);
-        for (int i = 1, l = 0, r = 0; i < n; ++i) {
-            if (i <= r && z1[i - l] < r - i + 1) {
-                z1[i] = z1[i - l];
-            } else {
-                z1[i] = max(0, r - i + 1);
-                while (i + z1[i] < n && p[z1[i]] == p[i + z1[i]]) ++z1[i];
-            }
-            if (i + z1[i] - 1 > r) l = i, r = i + z1[i] - 1;
+    vector<string> maxNumOfSubstrings(string s) {
+        int n = s.size();
+        unordered_map<char, int> umap;
+        for (int i = 0; i < n; ++i) {
+            umap[s[i]] = i;
         }
-        for (int i = 1, l = 0, r = 0; i < n; ++i) {
-            if (i <= r && z2[i - l] < r - i + 1) {
-                z2[i] = z2[i - l];
-            } else {
-                z2[i] = max(0, r - i + 1);
-                while (i + z2[i] < n && k[z2[i]] == k[i + z2[i]]) ++z2[i];
-            }
-            if (i + z2[i] - 1 > r) l = i, r = i + z2[i] - 1;
+        return maxNumOfSubstrings(s, umap, 0, n);
+    }
+    vector<string> maxNumOfSubstrings(string& s, unordered_map<char, int>& umap, int p, int q) {
+        int i = p, j = p + 1;
+        while (i < j) {
+            j = max(j, umap[s[i]]);
+            ++i;
         }
-        deque<int> d;
-        int i = 0;
-        while (i < t.size()) {
-            if (z1[i + m + 1]) {
-                d.push_back(i);
-                i += z1[i + m + 1];
-            }  else {
-                int j = i;
-                while (j < t.size() && z2[t.size() - j + m] != j - i + 1) ++j;
-                if (j < t.size() && z2[t.size() - j + m] == j - i + 1) {
-                    d.push_front(j - m + 1);
-                    i = j + 1;
-                } else break;
-            }
-        } 
-        vector<int> res;
-        //if (i < t.size() || d.size() > 10 * t.size()) return res;
-        res = vector<int>(d.begin(), d.end());
-        return res;
+        if (j + 1 >= q) return maxNumOfSubstrings(s, umap, p + 1, q);
+        if (j <= p + 1) return vector<string>{ s.substr(p, j + 1 - p) };
+        vector<string> v1 = maxNumOfSubstrings(s, umap, p + 1, j + 1);
+        vector<string> v2 = maxNumOfSubstrings(s, umap, j + 1, q);
+        if (!v1.size()) v1.push_back(s.substr(p, j + 1 - p));
+        v1.insert(v1.end(), v2.begin(), v2.end());
+        return v1;
     }
 };
 
@@ -139,7 +115,7 @@ int main() {
 
 
     vector<vector<int>> a = {{1,0,0,0},{1,0,0,0}, { 1,0,0,0}, {1,0,0,0}};
-    vector<int> b = { 2,3,4,0,5,1 };
+    vector<int> b = { 8,9,8,6,1,1 };
     vector<int> b_ = { 5,2,4,3,1,0 };
     vector<char> vc = { 'A', 'A', 'A', 'B', 'B', 'B' };
     
@@ -154,6 +130,6 @@ int main() {
                                 {"Carla","5","Ceviche"},
                                 {"Rous","3","Ceviche"} };
     Solution so;
-    so.movesToStamp("afc", "aafcaafacc");
+    so.maxNumOfSubstrings("adefaddaccc");
     return 0;
 }
