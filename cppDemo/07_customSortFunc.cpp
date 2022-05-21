@@ -54,5 +54,7 @@ int main(){
     //2.使用函数指针自定义优先级队列
     priority_queue<int, vector<int>, decltype(compare) *> q1(compare, vec);
     
+    priority_queue<int, vector<int>, greater<int>> q2;
+
     return 1;
 }
