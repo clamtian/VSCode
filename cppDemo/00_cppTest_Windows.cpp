@@ -14,6 +14,8 @@ int sum(int& a, int b) {
     return a; 
 }
 int main() {
+    bool c = NULL == NULL;
+    cout << c << endl;
     cout << "hello" << endl;
     int s = 0, d = 9;
 
