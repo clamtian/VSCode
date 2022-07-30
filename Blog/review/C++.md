@@ -1,4 +1,4 @@
-# 前置++与后置++
+# 1. 前置++与后置++
 
 ```Javascript
 // 前缀形式：增加然后取回值
@@ -19,49 +19,77 @@ const UPInt UPInt::operator++(int)
 
 前缀形式返回一个引用，后缀形式返回一个const类型
 
-## 1、为什么后置返回对象，⽽不是引⽤
+## 为什么后置返回对象，⽽不是引⽤
+
 因为后置为了返回旧值创建了⼀个临时对象，在函数结束的时候这个对象就会被销毁，函数不可以返回临时变量的引用！！！
 
+## 为什么后置前⾯也要加const
+
+为了防⽌你使⽤i++++,连续两次的调⽤后置++重载符。它与内置类型⾏为不⼀致：你⽆法取得你所期望的结果，因为第⼀次返回的是旧值，⽽不是原
+对象，你调⽤两次后置++，结果只累加了⼀次，所以我们必须⼿动禁⽌其合法化，就要在前⾯加上const。
+
+## 处理⽤户的⾃定义类型
+
+最好使⽤前置++，因为他不会创建临时对象，进⽽不会带来构造和析构⽽造成的额外开销。
 
 
-## 解法2：树状数组
+# 2. a++ 和 int a = b 在C++中是否是线程安全的？
 
-遍历前缀和数组sum并记录出现过的数字，当遍历到数字s时，我们需要查找在[s - upper, s - lower]之中出现过的数字个数，我们可以使用树状数组来对数据进行记录并且修改。
+不是
 
-最直观的记录方法是开一个数组对出现过的数字做下标记录，但数字范围过大，所以需要对所有可能出现过的数字进行哈希处理。
+a++：从C/C++语法的级别来看，这是⼀条语句，应该是原⼦的；但从编译器得到的汇编指令来看，其实不是原⼦的。
 
-```JavaScript
-typedef long long LL;
-class Solution {
-public:
-    int countRangeSum(vector<int>& nums, int lower, int upper) {
-        int n = nums.size();
-        int ans = 0;
-        set<LL> s;
-        s.insert(0);
-        vector<LL> sum(n + 1);
-        for(int i = 0; i < n; ++i){
-            sum[i + 1] = sum[i] + nums[i];
-            s.insert(sum[i + 1]);
-            s.insert(sum[i + 1] - upper);
-            s.insert(sum[i + 1] - lower);
-        }
-        unordered_map<LL, int> umap;
-        int idx = 0;
-        for(LL num : s)
-            umap[num] = idx++;
-        vector<int> tree(idx + 1);
-        for(int i = 0; i <= n; ++i){
-            int a = query(umap[sum[i] - upper], tree), b = query(umap[sum[i] - lower] + 1, tree);
-            ans += b - a;
-            for(int p = umap[sum[i]] + 1; p <= idx; p += p & -p) tree[p] += 1;
-        }
-        return ans;
-    }
-    int query(int i, vector<int>& tree){
-        int s = 0;
-        for(int p = i; p; p -= p & -p) s += tree[p];
-        return s;
-    }
-};
+```javascript
+mov eax, dword ptr [a] # (1)
+inc eax # (2)
+mov dword ptr [a], eax # (3)
 ```
+
+其⼀般对应三条指令，⾸先将变量a对应的内存值搬运到某个寄存器（如eax）中，然后将该寄存器中的值⾃增1，再将该寄存器中的值搬运回a代表的内存中
+
+现在假设i的值是0，有两个线程，每个线程对变量a的值都递增1，预想⼀下，其结果应该是2，可实际运⾏结果可能是1！
+
+分析：我们预想的结果是线程1和线程2的三条指令各⾃执⾏，最终a的值变为2，但是由于操作系统线程调度的不确定性，线程1执⾏完指令(1)和(2)后，eax寄存器中的值变为1，此时操作系统切换到线程2执⾏，执⾏指令(1)(2)(3)，此时eax的值变为1；接着操作系统切回线程1继续执⾏，执⾏指令(3)，得到a的最终结果1。
+
+int a = b; 从C/C++语法的级别来看，这是条语句应该是原⼦的；但从编译器得到的汇编指令来看，由于现在计算机CPU架构体系的限制，**数据不能直接从内存某处搬运到内存另外⼀处，必须借助寄存器中转**，因此这条语句⼀般对应两条计算机指令，即将变量b的值搬运到某个寄存器（如eax）中，再从该寄存器搬运到变量a的内存地址中：
+
+```javascript
+mov eax, dword ptr [b]
+mov dword prt [a], eax
+```
+
+既然是两条指令，那么多个线程在执⾏这两条指令时，某个线程可能会在第⼀条指令执⾏完毕后被剥夺CPU时间⽚，切换到另⼀个线程⽽出现不确定的情况。
+
+## 解决方法
+
+C++11新标准发布后改变了这种困境，新标准提供了对整形变量原⼦操作的相关库，即std::atomic，这是⼀个模板类型：
+
+```javascript
+template<class T>
+struct atomic:
+```
+
+我们可以传⼊具体的整型类型对模板进⾏实例化，实际上stl库也提供了这些实例化的模板类型
+
+```javascript
+std::atomic<int> value;
+value = 99;
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
