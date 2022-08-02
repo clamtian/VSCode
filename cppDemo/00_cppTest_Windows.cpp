@@ -10,42 +10,35 @@ using namespace std;
 
 class A {
 public:
-	virtual void funcA();
-	void funcB();
+	void funcA();
 
 	
 };
 class B : public A {
 public:
 	//virtual void funcA();
-	void funcB();
+	void funcA();
 
 
 };
 
-class C : public B {
-	virtual void funcA();
+class C : public A, public B {
+	//void funcA();
 };
 
-void C::funcA () {
-	cout << "C's funcA" << endl;
-}
 
 void A::funcA () {
 	cout << "A's funcA" << endl;
 }
-void A::funcB () {
-	cout << "A's funcB" << endl;
+void B::funcA () {
+	cout << "B's funcA" << endl;
 }
 
 
-void B::funcB () {
-	cout << "B's funcB" << endl;
-}
  
 int main(int argc,char* argv[])
 {
-	A *a = new C();
-	a->funcA();
+	C c;
+	c.funcA();
 	return 1;
 }
