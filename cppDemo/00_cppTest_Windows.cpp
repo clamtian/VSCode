@@ -39,6 +39,5 @@ void B::funcA () {
 int main(int argc,char* argv[])
 {
 	C c;
-	c.funcA();
 	return 1;
 }
