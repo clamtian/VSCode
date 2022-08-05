@@ -22,10 +22,6 @@ public:
 
 };
 
-class C : public A, public B {
-	//void funcA();
-};
-
 
 void A::funcA () {
 	cout << "A's funcA" << endl;
@@ -35,9 +31,14 @@ void B::funcA () {
 }
 
 
- 
+char* getM() {
+	//char p[] = "Hello";
+	//return p;
+}
 int main(int argc,char* argv[])
 {
-	C c;
+	char p[] = "nullptr;";
+	//p = getM();
+	cout << p << endl;
 	return 1;
 }
