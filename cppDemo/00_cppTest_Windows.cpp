@@ -31,6 +31,9 @@ void B::funcA () {
 }
 
 
+float sqrt(float);
+A sqrt(double);
+
 char* getM() {
 	//char p[] = "Hello";
 	//return p;
