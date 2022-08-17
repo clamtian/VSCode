@@ -40,8 +40,9 @@ char* getM() {
 }
 int main(int argc,char* argv[])
 {
+	int s = stoi("1");
 	char p[] = "nullptr;";
 	//p = getM();
-	cout << p << endl;
+	cout << s << endl;
 	return 1;
 }
