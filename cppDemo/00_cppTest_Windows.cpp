@@ -34,15 +34,17 @@ void B::funcA () {
 float sqrt(float);
 A sqrt(double);
 
-char* getM() {
-	//char p[] = "Hello";
-	//return p;
+const vector<int> test(const vector<int>& v) {
+	vector<int> s = v;
+	//v.push_back(1);
+	return s;
 }
 int main(int argc,char* argv[])
 {
-	int s = stoi("1");
-	char p[] = "nullptr;";
-	//p = getM();
-	cout << s << endl;
+	int a = 1;
+	vector<int> v{ 9 };
+	test(v);
+	v = test(v);
+	test(test(v));
 	return 1;
 }
