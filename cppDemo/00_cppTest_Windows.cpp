@@ -3,6 +3,7 @@
 #include <queue>
 #include <unordered_map>
 #include <algorithm>
+#include <time.h>
 
 typedef long int LL;
 
@@ -41,10 +42,14 @@ const vector<int> test(const vector<int>& v) {
 }
 int main(int argc,char* argv[])
 {
-	int a = 1;
-	vector<int> v{ 9 };
-	test(v);
-	v = test(v);
-	test(test(v));
+	clock_t start,end;//定义clock_t变量
+	start = clock();//开始时间
+
+	string s = "";
+	for (int i = 0; i  < 100000; ++i) s += to_string(i / 10 + i);
+
+	string c = s;
+	end = clock();   //结束时间
+	cout<<"time = "<<double(end-start)/CLOCKS_PER_SEC<<"s"<<endl;  //输出时间（单位：ｓ）
 	return 1;
 }
