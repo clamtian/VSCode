@@ -29,7 +29,7 @@ vector<int> generateRandomArray(int maxSize, int maxValue){
 }
 
 int main(){
-    vector<int> vec = generateArndomArray(20, 100);
+    vector<int> vec = generateRandomArray(20, 100);
     auto vec2 = vec;
     
 }
