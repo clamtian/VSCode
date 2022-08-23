@@ -44,6 +44,8 @@ void quickSort(vector<int>& vec, int l, int r){
         do --j; while(vec[j] > x);
         if(i < j) swap(vec[i], vec[j]);
     }
+
+    // 为什么用j？ 考虑数组[3,5]，i最终的位置是1，这样输入永远是[l, i] = [0, 1]
     quickSort(vec, l, j);
     quickSort(vec, j + 1, r);
 }

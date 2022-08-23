@@ -58,21 +58,20 @@ void inOrderRecur(TreeNode* head) {
 }
 
 void inOrderUnRecur(TreeNode* head) {
-    if(!head) return;
-    TreeNode* node = head;
+    if (!head) return;
     stack<TreeNode*> s;
-    s.push(node);
-	while (s.size() || node) {
-		if (node) {
-			s.push(head);
-			head = head->left;
-		} else {
-			head = s.top();
+    TreeNode *node = head;
+    while (s.size() || node) {
+        if (node) {
+            s.push(node);
+            node = node->left;
+        } else {
+            node = s.top();
             s.pop();
-			cout << head->val << " " << endl;
-			head = head->right;
-		}
-	}
+            cout << node->val << " " << endl;
+            node = node->right;
+        }
+    }
 }
 
 void posOrderRecur(TreeNode* head) {

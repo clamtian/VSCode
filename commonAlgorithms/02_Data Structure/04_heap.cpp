@@ -39,6 +39,7 @@ int pop(){
     while(l < s){
         //int t = l + 1 < s && q[l + 1] < q[l] ? l + 1 : l;
         //t = q[t] < q[idx] ? t : idx;          小根堆
+        // idx为当前节点   l为当前节点的左孩子  t为当前节点孩子中较大的那个
         int t = l + 1 < s && q[l + 1] > q[l] ? l + 1 : l;
         t = q[t] > q[idx] ? t : idx;
         if(t == idx) break;

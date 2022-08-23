@@ -1,55 +1,65 @@
-#include <iostream>
 #include <vector>
-#include <queue>
-#include <unordered_map>
+#include <string>
+#include <list>
+#include <map> 
+#include <vector> 
 #include <algorithm>
+#include <set>
+#include <stack>
+#include <unordered_map>
+#include <unordered_set>
+#include <numeric>
+#include <queue>
+#include <iostream>
+#include <stdlib.h>
 #include <time.h>
 
 typedef long int LL;
 
 using namespace std;
 
-class A {
-public:
-	void funcA();
-
-	
-};
-class B : public A {
-public:
-	//virtual void funcA();
-	void funcA();
 
 
-};
+const int N = 100001;
 
+int q[N];
+int size = 0;
 
-void A::funcA () {
-	cout << "A's funcA" << endl;
+int pop() {
+    int res = q[0];
+    swap(q[0], q[--size]);
+    int idx = 0, l = 1;
+    while (l < size) {
+        int t = l + 1 < size && q[l + 1] > q[l] ? l + 1 : l;
+        t = q[idx] > q[t] ? idx : t;
+        if (t == idx) break;
+        swap(q[t], q[idx]);
+        idx = t;
+        l = idx * 2 + 1;
+    }
+    return res;
 }
-void B::funcA () {
-	cout << "B's funcA" << endl;
+
+
+
+void insert(int x) {
+    int t = size;
+    q[size++] = x;
+    while (q[t] > q[(t - 1) / 2]) {
+        swap(q[t], q[(t - 1) / 2]);
+        t = (t - 1) / 2;
+    }
+
 }
 
-
-float sqrt(float);
-A sqrt(double);
-
-const vector<int> test(const vector<int>& v) {
-	vector<int> s = v;
-	//v.push_back(1);
-	return s;
-}
 int main(int argc,char* argv[])
 {
-	clock_t start,end;//定义clock_t变量
-	start = clock();//开始时间
-
-	string s = "";
-	for (int i = 0; i  < 100000; ++i) s += to_string(i / 10 + i);
-
-	string c = s;
-	end = clock();   //结束时间
-	cout<<"time = "<<double(end-start)/CLOCKS_PER_SEC<<"s"<<endl;  //输出时间（单位：ｓ）
+	vector<int> v = { 3, 5, 5, 7,6,56,87};
+	for (int i = 0; i < v.size(); ++i) {
+		insert(v[i]);
+	}
+	for (int i = 0; i < v.size(); ++i) {
+		cout << pop() << endl;
+	}
 	return 1;
 }
