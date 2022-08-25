@@ -92,17 +92,19 @@ void posOrderUnRecur1(TreeNode* head) {
 		s2.push(head);
 		if (head->left) s1.push(head->left);
 		if (head->right) s1.push(head->right);
-		while (s2.size()) {
-            cout << s2.top()->val << " " << endl;
-            s2.pop();
-        }
+    }
+    while (s2.size()) {
+        cout << s2.top()->val << " " << endl;
+        s2.pop();
     }
 }
 
+// 按照后续遍历的顺序 当前节点的前一个节点一定是当前节点的左孩子或者右孩子
 void posOrderUnRecur2(TreeNode* head) {
     if(!head) return;
 	stack<TreeNode*> s;
 	s.push(head);
+    // h代表上一个被遍历到的节点
 	TreeNode* node, *h = head;
 	while (s.size()) {
 		node = s.top();
@@ -110,7 +112,7 @@ void posOrderUnRecur2(TreeNode* head) {
             s.push(node->left);
         } else if (node->right && h != node->right) {
             s.push(node->right);
-        }else {
+        } else {
             cout << s.top()->val << " " << endl;
             s.pop();
             h = node;

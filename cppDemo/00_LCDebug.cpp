@@ -74,9 +74,15 @@ public:
     }
 };
 
+void f(TreeNode *t) {
+    t = new TreeNode(9);
+}
 int main() {
 
     
+    TreeNode *pp = new TreeNode(0);
+    f(pp);
+    cout << pp->val << endl;
     ///cout << search("bad") << endl;
     ListNode x1(5);
     ListNode x2(2);
