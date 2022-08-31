@@ -11,59 +11,54 @@ using namespace std;
 /*
 若一个由图中所有点构成的序列 A 满足：对于图中的每条边 (x,y)，x 在 A 中都出现在 y 之前，则称 A 是该图的一个拓扑序列
 */
-const int N = 100010;
-// cnt[i] 存储点i的入度
-int h[N], e[2 * N], ne[2 * N], st[2 * N], cnt[N], idx;
-int n, m;
-queue<int> q;
-vector<int> order;
 
-void add(int a, int b){
-    e[idx] = b;
-    ne[idx] = h[a];
-    h[a] = idx++;
-    ++cnt[b];
-}
-
-void topSort(){
-    for(int i = 1; i <= n; ++i){
-        if(!cnt[i]){
-            q.push(i);
-            order.push_back(i);
-        } 
+// A 的格式为 [a, b]， 表示有一条 a->b 的边
+vector<int> topSort(int n, vector<vector<int>>& A) {
+    vector<int> degree(n);
+    vector<vector<int>> edges(n);
+    vector<int> res;
+    for (auto& v : A) {
+        degree[v[1]]++;
+        edges[v[0]].push_back(v[1]);
     }
-    while(!q.empty()){
-        int a = q.front();
-        q.pop();
-        for(int i = h[a]; i != -1; i = ne[i]){
-            int j = e[i];
-            --cnt[j];
-            if(cnt[j] == 0){
-                q.push(j);
-                order.push_back(j);
-            } 
+    queue<int> q;
+    for (int i = 0; i < n; ++i) {
+        if (degree[i] == 0) {
+            q.push(i);
+            res.push_back(i);
         }
     }
+    while (q.size()) {
+        int k = q.front();
+        q.pop();
+        for (int v : edges[k]) {
+            --degree[v];
+            if (degree[v] == 0) {
+                q.push(v);
+                res.push_back(v);
+            }
+        }
+    }
+    return res;
+    
 }
 
-int main(){
-    
+int main() {
+    int n, m;
     cin >> n >> m;
-    idx = 0;
-    memset(h, -1, sizeof(h));
-    while(m--){
-        int a = 0, b = 0;
+    vector<vector<int>> edges;
+    while (m) {
+        --m;
+        int a, b;
         cin >> a >> b;
-        add(a, b);
+        edges.push_back({ a - 1, b - 1 });
     }
-    
-    topSort();
+    vector<int> order = topSort(n, edges);
+
     // 如果所有点都入过队了，说明存在拓扑序列；否则不存在拓扑序列
-    if(order.size() == n){
-        for(int i = 0; i < n; ++i) cout << order[i] << " ";
-    }else{
-        cout << -1;
-    } 
-    
+
+    if (order.size() == n) {
+        for (int t : order) cout << t + 1 << " ";
+    } else cout << -1;
     return 0;
 }

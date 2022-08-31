@@ -3,6 +3,14 @@
 
 using namespace std;
 
+
+/*
+这招适合用来炫技
+一般写题时候就不这么搞了
+直接vector<vector<int>>或者用map<int, vector<int>>就好了
+写这个容易出错
+*/
+
 //邻接表存储有向图   头插法
 const int N = 100010;
 
