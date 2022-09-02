@@ -44,6 +44,7 @@ vector<int> topSort(int n, vector<vector<int>>& A) {
 }
 
 int main() {
+
     int n, m;
     cin >> n >> m;
     vector<vector<int>> edges;
