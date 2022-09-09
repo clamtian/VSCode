@@ -54,12 +54,6 @@ void insert(int x) {
 
 int main(int argc,char* argv[])
 {
-	vector<int> v = { 3, 5, 5, 7,6,56,87};
-	for (int i = 0; i < v.size(); ++i) {
-		insert(v[i]);
-	}
-	for (int i = 0; i < v.size(); ++i) {
-		cout << pop() << endl;
-	}
+	int a[10] = { [0] = 1, [2] = 5};
 	return 1;
 }
