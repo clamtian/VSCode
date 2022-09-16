@@ -550,7 +550,28 @@ struct PushRegs {
 
 再接着将 `GD_KD` 的值赋值给寄存器 ds, es，接着就可以调用 `trap` 函数了。`call`指令的前一个指令，就是将当前栈指针压栈了，就是在给`trap`函数传参。在文件 `kern/trap.c` 中的 `trap` 函数中，函数接受的参数 `tf` ，就是这样传进来的。
 
-再仔细看看`trap`函数及其调用的函数的行为：
+```javascript
+struct Trapframe {
+	struct PushRegs tf_regs;
+	uint16_t tf_es;
+	uint16_t tf_padding1;
+	uint16_t tf_ds;
+	uint16_t tf_padding2;
+	uint32_t tf_trapno;
+	/* below here defined by x86 hardware */
+	uint32_t tf_err;
+	uintptr_t tf_eip;
+	uint16_t tf_cs;
+	uint16_t tf_padding3;
+	uint32_t tf_eflags;
+	/* below here only when crossing rings, such as from user to kernel */
+	uintptr_t tf_esp;
+	uint16_t tf_ss;
+	uint16_t tf_padding4;
+} __attribute__((packed));
+```
+
+`tf` 中的内容就与我们刚才压进栈里的寄存器值一一对应。再仔细看看`trap`函数及其调用的函数的行为：
 
 ```javascript
 void

@@ -52,6 +52,43 @@ void insert(int x) {
 
 }
 
+
+int lock_t = 0;
+
+int testAndSet(int* lock, int new_val) {
+    int old_val = *lock;
+    *lock = new_val;
+    return old_val;    
+}
+
+
+void lock(int* lock_t) {
+    while (testAndSet(lock_t, 1) == 1) {
+        /*
+         * 保存当前进程的状态 S
+         * 把 S 插入到阻塞队列（获取不到当前锁而阻塞）
+         * 陷入内核态  执行进程调度
+         */
+    }
+}
+
+void unlock(int* lock_t) {
+    *lock_t = 0;
+    // 取出阻塞队列队头  执行
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 int main(int argc,char* argv[])
 {
 	int a[10] = { [0] = 1, [2] = 5};
