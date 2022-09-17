@@ -87,74 +87,11 @@ int page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 
 在lab3中，我们将实现操作系统的一些基本功能，来实现用户环境下的进程的正常运行。你将会加强JOS内核的功能，为它增添一些重要的数据结构，用来记录用户进程环境的一些信息；创建一个单一的用户环境，并且加载一个程序运行它。你也需要让JOS内核能够完成用户环境所作出的任何系统调用，以及处理用户环境产生的各种异常。
 
-
-
-
-
-
-
-
-
-
-
-
-
-`kern/init.c`中调用了宏函数`ENV_CREATE`，从而指定了在之后的`env_run`中要执行的进程。可以执行的进程在`user`目录下的一系列C文件中写好了，都非常简单。给`ENV_CREATE`传`user_*`，*处填写对应在`user`目录下的文件名就可以了。一开始使用的是`user_hello`，就是对应`user/hello.c`。函数`env_run`里调用了`env_pop_tf`函数，`env_pop_tf`函数上面已经讲过了，我们这里来深入一下：
-
-函数`env_pop_tf`接受一个指针，包含了和进程有关的信息。函数做了这些事情：
-
-```javascript
-void env_pop_tf(struct Trapframe *tf)
-{
-	asm volatile(
-		"\tmovl %0,%%esp\n"  // 将%esp指向tf地址处
-		"\tpopal\n"			 // 弹出Trapframe结构中的tf_regs值到通用寄存器
-		"\tpopl %%es\n"		 // 弹出Trapframe结构中的tf_es值到%es寄存器
-		"\tpopl %%ds\n"		 // 弹出Trapframe结构中的tf_ds值到%ds寄存器
-		"\taddl $0x8,%%esp\n" 
-		"\tiret\n"           //中断返回指令，具体动作如下：从Trapframe结构中依次弹出tf_eip,tf_cs,tf_eflags,tf_esp,tf_ss到相应寄存器
-		: : "g" (tf) : "memory"); //g是一个通用约束，可以表示使用通用寄存器、内存、立即数等任何一种处理方式
-	panic("iret failed");  
-}
-
-// trapframe结构
-struct Trapframe {
-	struct PushRegs tf_regs;
-	uint16_t tf_es;
-	uint16_t tf_padding1;
-	uint16_t tf_ds;
-	uint16_t tf_padding2;
-	uint32_t tf_trapno;
-	/* below here defined by x86 hardware */
-	uint32_t tf_err;
-	uintptr_t tf_eip;
-	uint16_t tf_cs;
-	uint16_t tf_padding3;
-	uint32_t tf_eflags;
-	/* below here only when crossing rings, such as from user to kernel */
-	uintptr_t tf_esp;
-	uint16_t tf_ss;
-	uint16_t tf_padding4;
-} __attribute__((packed));
-```
-关于这段程序我目前是这么理解的，在`env_create`函数中我们已经将所执行ELF文件的内容加载到了相应的内存空间中，同时装填好了该程序运行所需的`Trapframe`结构(`e->env_tf`)，所以在`env_pop_tf`函数中我们就将这个`trapframe`里面所存储的寄存器值按顺序装填到相应寄存器中，`iret`指令之后正式进入`user mode`，按照eip找到用户程序的第一条指令开始执行（EIP存储的是程序入口地址）。
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # 2.用户环境
 
-新添加的文件`inc/env.h`里面包含了JOS内核的有关用户环境(User Environment)的一些基本定义。用户环境指的就是一个应用程序运行在系统中所需要的一个上下文环境，操作系统内核使用数据结构 `Env` 来记录每一个用户环境的信息。在这个实验中，我们将会先创建一个用户环境，但是之后我们会把它设计成能够支持多用户环境，即多个用户程序并发执行的系统。
+新添加的文件 `inc/env.h` 里面包含了JOS内核的有关用户环境（User Environment）的一些基本定义。用户环境指的就是一个应用程序运行在系统中所需要的一个上下文环境，操作系统内核使用数据结构 `Env` 来记录每一个用户环境的信息。在这个实验中，我们将会先创建一个用户环境，但是之后我们会把它设计成能够支持多用户环境，即多个用户程序并发执行的系统。
+
+当可执行文件被加载到内存当作进程执行后，会有一个数据结构来记录管理进程的执行情况，这个数据结构就是 PCB（Process Control Block），进程控制块。在 xv6 中充当进程控制块的就是 `Env` 结构体。
 
 在 `kern/env.c` 文件中我们看到，操作系统一共维护了三个重要的和用户环境相关的全局变量：
 
@@ -164,15 +101,15 @@ struct Env *curenv = NULL;		// The current env
 static struct Env *env_free_list;	// Free environment list
 ```
 
-JOS内核使用 Env结构体来追踪用户进程。其中 `envs`变量是指向所有进程的链表的指针，其操作方式跟lab2的`pages`类似，`env_free_list`是空闲的进程结构链表。注意下，在早起的JOS实验中，`pages`和`envs`都是用的双向链表，现在的版本用的单向链表操作起来更加简单和清晰。
+JOS内核使用 Env结构体来追踪用户进程。其中 `envs` 变量是指向所有进程的链表的指针，其操作方式跟 lab2 的 `pages` 类似，`env_free_list` 是空闲的进程结构链表。注意下，在早先的JOS实验中，`pages` 和 `envs` 都是用的双向链表，现在的版本用的单向链表操作起来更加简单和清晰。
 
-JOS系统启动之后，`envs`指针便指向了一个 `Env` 结构体链表，表示系统中所有的用户环境。在我们的设计中，JOS内核将支持同一时刻最多 `NENV`(1024) 个活跃的用户环境，尽管这个数字要比真实情况下任意给定时刻的活跃用户环境数要多很多。系统会为每一个活跃的用户环境在`envs`链表中维护一个 `Env` 结构体。
+JOS系统启动之后，`envs` 指针便指向了一个 `Env` 结构体链表，表示系统中所有的用户环境。在我们的设计中，JOS内核将支持同一时刻最多 `NENV = 1024` 个活跃的用户环境，尽管这个数字要比真实情况下任意给定时刻的活跃用户环境数要多很多。系统会为每一个活跃的用户环境在 `envs` 链表中维护一个 `Env` 结构体。
 
-JOS内核也把所有未执行的`Env`结构体，用`env_free_list`连接起来。这种设计方式非常方便进行用户环境`env`的分配和回收。
+JOS内核也把所有未执行的 `Env` 结构体，用 `env_free_list` 连接起来。这种设计方式非常方便进行用户环境 `env` 的分配和回收。
 
-内核也会把 `curenv` 指针指向在任意时刻正在执行的用户环境的 `Env` 结构体。在内核启动时，并且还没有任何用户环境运行时，`curenv`的值为NULL。
+内核也会把 `curenv` 指针指向在任意时刻正在执行的用户环境的 `Env` 结构体。在内核启动时，并且还没有任何用户环境运行时，`curenv` 的值为NULL。
 
-接下来看一下`Env`结构体的定义：
+接下来看一下 `Env` 结构体的定义：
 
 ```JavaScript
 struct Env {
@@ -191,20 +128,21 @@ struct Env {
 
 进程结构体 Env 各字段定义如下：
 
-* env_tf： 当进程停止运行时用于保存寄存器的值，比如当发生中断切换到内核环境运行了或者切换到另一个进程运行的时候需要保存当前进程的寄存器的值以便后续该进程继续执行。
-* env_link：指向空闲进程链表 env_free_list 中的下一个 Env 结构。
-* env_id： 进程ID。因为进程ID是正数，所以符号位是0，而中间的21位是标识符，标识在不同的时间创建但是却共享同一个进程索引号的进程，最后10位是进程的索引号，要用envs索引进程管理结构 Env 就要用 ENVX(env_id)。
-* env_parent_id： 进程的父进程ID。
-* env_type：进程类型，通常是 ENV_TYPE_USER，后面实验中可能会用到其他类型。
+* env_tf：当进程停止运行时用于保存寄存器的值，比如当发生中断切换到内核环境运行或者切换到另一个进程运行的时候需要保存当前进程的寄存器的值以便后续该进程继续执行；
+* env_link：指向空闲进程链表 env_free_list 中的下一个 Env 结构；
+* env_id：进程 ID。因为进程 ID 是正数，所以符号位是 0，而中间的21位是标识符，标识在不同的时间创建但是却共享同一个进程索引号的进程，最后 10 位是进程的索引号，要用 envs 索引进程管理结构 Env 就要用 ENVX(env_id)；
+* env_parent_id：进程的父进程ID；
+* env_type：进程类型，通常是 ENV_TYPE_USER，后面实验中可能会用到其他类型；
 * env_status：进程状态，进程可能处于下面几种状态
-  * ENV_FREE：标识该进程结构处于不活跃状态，存在于 env_free_list 链表。
-  * ENV_RUNNABLE: 标识该进程处于等待运行的状态。
-  * ENV_RUNNING: 标识该进程是当前正在运行的进程。
-  * ENV_NOT_RUNNABLE: 标识该进程是当前运行的进程，但是处于不活跃的状态，比如在等待另一个进程的IPC。
-  * ENV_DYING: 该状态用于标识僵尸进程。在实验4才会用到这个状态，实验3不用。
+  * ENV_FREE：标识该进程结构处于不活跃状态，存在于 env_free_list 链表；
+  * ENV_RUNNABLE: 标识该进程处于等待运行的状态；
+  * ENV_RUNNING: 标识该进程是当前正在运行的进程；
+  * ENV_NOT_RUNNABLE: 标识该进程是阻塞状态，比如在等待另一个进程的 IPC；
+  * ENV_DYING: 该状态用于标识僵尸进程。在 lab4 才会用到这个状态，lab3 不用。
+* env_runs：标志该进程已经运行了几次；
 * env_pgdir：用于保存进程页目录的虚拟地址。
 
-接下来我们需要对管理用户环境的结构进行初始化，进程管理结构`envs`对应的1024个Env结构体在物理内存中紧接着pages存储。如下图`nextfree`指向的位置：
+接下来我们需要对管理用户环境的结构进行初始化，进程管理结构 `envs` 对应的1024个 Env 结构体在物理内存中紧接着 pages 存储。如下图 `nextfree` 指向的位置：
 
 ![avatar](./image/lab2内存使用情况4.png)
 
@@ -229,50 +167,60 @@ i386_init (kern/init.c)
 
 进程初始化流程主要包括：
 
-* 给`NENV`个Env结构体在内存中分配空间，并将 envs 结构体的物理地址映射到 从 `UENV` 所指向的线性地址空间，该线性地址空间允许用户访问且只读，所以页面权限被标记为`PTE_U`。
+* 给 `NENV` 个 Env 结构体在内存中分配空间，并将 envs 结构体的物理地址映射到 从 `UENV` 所指向的线性地址空间，该线性地址空间允许用户访问且只读，所以页面权限被标记为 `PTE_U`。
 
-* 调用`env_init`函数初始化envs，将 `NENV` 个进程管理结构Env通过`env_link`串联起来，注意，`env_free_list`要指向第一个 Env，所以这里要用倒序的方式。在`env_init`函数中调用了`env_init_percpu`函数，加载新的全局描述符表。
+* 调用 `env_init` 函数初始化envs，将 `NENV` 个进程管理结构 Env 通过 `env_link` 串联起来，注意，`env_free_list` 要指向第一个 Env，所以这里要用倒序的方式。在 `env_init` 函数中调用了 `env_init_percpu` 函数，加载新的 GDT。
   
-* 初始化好了`envs`和`env_free_list`后，接着调用 `ENV_CREATE(user_hello, ENV_TYPE_USER)` 创建用户进程。`ENV_CREATE`是`kern/env.h`中的宏定义，展开就是调用的 `env_create`,只是参数设置成了 `env_create(_binary_obj_user_hello_start, ENV_TYPE_USER)`。`env_create`也是我们要实现的函数，它的功能就是先调用`env_alloc`函数分配好Env结构，初始化Env的各个字段值(如`env_id`，`env_type`，`env_status`以及`env_tf`的用于存储寄存器值的字段，运行用户程序时会将 `env_tf` 的字段值加载到对应的寄存器中)，为该用户进程分配页目录表并调用`load_icode`函数加载程序代码到内存中。
+* 初始化好了 `envs` 和 `env_free_list` 后，接着调用 `ENV_CREATE(user_hello, ENV_TYPE_USER)` 创建第一个用户进程。`ENV_CREATE` 是 `kern/env.h` 中的宏定义，展开就是调用的 `env_create`，只是参数设置成了 `env_create(_binary_obj_user_hello_start, ENV_TYPE_USER)`。`env_create` 也是我们要实现的函数，它的功能就是先调用 `env_alloc` 函数分配好 Env 结构，初始化 Env 的各个字段值（如 `env_id`，`env_type`，`env_status` 以及 `env_tf` 的用于存储寄存器值的字段，运行用户程序时会将 `env_tf` 的字段值加载到对应的寄存器中），为该用户进程分配页目录表并调用 `load_icode` 函数加载程序代码到内存中。
   
-  * `env_alloc`调用`env_setup_vm`函数分配好页目录的页表，并设置页目录项和`env_pgdir`字段)。
-  * `load_icode`函数则是先设置cr3寄存器切换到该进程的页目录`env_pgdir`，然后通过`region_alloc`分配每个程序段的内存并按segment将代码加载到对应内存中，加载完成后设置 `env_tf->tf_eip`为Elf的`e_entry`，即程序的初始执行位置。
+  * `env_alloc` 调用 `env_setup_vm` 函数分配好页目录的页表，并设置页目录项和 `env_pgdir` 字段；
+  * `load_icode` 函数则是先设置 cr3 寄存器切换到该进程的页目录 `env_pgdir`，然后通过 `region_alloc` 分配每个程序段的内存并按 segment 将代码加载到对应内存中，加载完成后设置 `env_tf->tf_eip` 为 Elf 的 `e_entry`，即程序的初始执行位置；
   
-* 加载完程序代码后，万事俱备，调用 `env_run(e)` 函数开始运行程序。如果当前有进程正在运行，则设置当前进程状态为`ENV_RUNNABLE`，并将需要运行的进程e的状态设置为`ENV_RUNNING`，然后加载e的页目录表地址 `env_pgdir` 到cr3寄存器中，调用 `env_pop_tf(struct Trapframe *tf)` 开始执行程序e。
+* 加载完程序代码后，万事俱备，调用 `env_run(e)` 函数开始运行进程。如果当前有进程 curenv 正在运行，则设置当前进程状态为 `ENV_RUNNABLE`，并将需要运行的进程 e 的状态设置为 `ENV_RUNNING`，然后加载 e 的页目录表地址 `env_pgdir` 到cr3寄存器中，调用 `env_pop_tf(struct Trapframe *tf)` 开始执行程序 e。由于当前运行的是第一个用户进程，所以不需要切换。
   
-* `env_pop_tf`其实就是将栈指针esp指向该进程的`env_tf`，然后将 `env_tf` 中存储的寄存器的值弹出到对应寄存器中，最后通过 `iret` 指令弹出栈中的元素分别到 EIP, CS, EFLAGS 到对应寄存器并跳转到 CS:EIP 存储的地址执行(当使用`iret`指令返回到一个不同特权级运行时，还会弹出堆栈段选择子及堆栈指针分别到SS与SP寄存器)，这样，相关寄存器都从内核设置成了用户程序对应的值，EIP存储的是程序入口地址。
-  
-* `env_id`的生成规则很有意思，注意一下在`env_free`中并没有重置`env_id`的值，这就是为了用来下一次使用这个env结构体时生成一个新的`env_id`，区分之前用过的`env_id`，从generation的生成方式就能明白了。
+* `env_pop_tf` 其实就是将栈指针 esp 指向该进程的 `env_tf`，然后将 `env_tf` 中存储的寄存器的值弹出到对应寄存器中，最后通过 `iret` 指令跳转到 CS:EIP 存储的地址执行。这样，相关寄存器都从内核设置成了用户程序对应的值，EIP 存储的是程序入口地址。
 
-## 关于ELF文件
+`kern/init.c` 中调用了宏函数 `ENV_CREATE`，从而指定了在之后的 `env_run` 中要执行的进程。可以执行的进程在 `user` 目录下的一系列 C 文件中写好了，都非常简单。给 `ENV_CREATE` 传 `user_*`，* 处填写对应在 `user` 目录下的文件名就可以了。一开始使用的是 `user_hello`，就是对应 `user/hello.c`。函数 `env_run` 里调用了 `env_pop_tf` 函数，`env_pop_tf` 函数上面已经讲过了，我们这里来深入一下：
 
-在`load_icode()`函数中，我们要对ELF文件进行解析，之前在lab1中我们讲过了ELF文件的结构，这里再简单介绍一下。
+函数 `env_pop_tf` 接受一个指针，包含了和进程有关的信息。函数做了这些事情：
 
-在`load_icode()`函数中我们没有加载真的可执行文件，因为还没有文件系统。这个Lab使用的ELF文件是通过连接器嵌入到内核这个可执行文件中的。ELF文件有多个ProgHdr，对应多个区块，每个区块都有指定好的虚拟地址和长度，我们只需要从ELF中读取出这些信息，把数据拷贝到相应位置就可以。
+```javascript
+void env_pop_tf(struct Trapframe *tf)
+{
+	asm volatile(
+		"\tmovl %0,%%esp\n"  // 将 %esp 指向 tf 地址处
+		"\tpopal\n"			 // 弹出 Trapframe 结构中的 tf_regs 值到通用寄存器
+		"\tpopl %%es\n"		 // 弹出 Trapframe 结构中的 tf_es 值到 %es 寄存器
+		"\tpopl %%ds\n"		 // 弹出 Trapframe 结构中的 tf_ds 值到 %ds 寄存器
+		"\taddl $0x8,%%esp\n" 
+		"\tiret\n"           //中断返回指令，具体动作如下：从 Trapframe 结构中依次弹出 tf_eip,tf_cs,tf_eflags,tf_esp,tf_ss 到相应寄存器
+		: : "g" (tf) : "memory"); // g 是一个通用约束，可以表示使用通用寄存器、内存、立即数等任何一种处理方式
+	panic("iret failed");  
+}
 
-有内存空间才能执行指令，在拷贝ELF文件中的各个部分到指定位置之前，需要通过已有的分配器给进程足够多的page，用于存放ELF文件镜像。光是ELF文件中的内容还不够，进程执行还需要栈，我们也要给进程栈分配空间，并映射到指定虚拟地址。
-
-**ELF文件结构**
-
-```JavaScript
-struct Elf {
-	uint32_t e_magic;	// must equal ELF_MAGIC
-	uint8_t e_elf[12];
-	uint16_t e_type;
-	uint16_t e_machine;
-	uint32_t e_version;
-	uint32_t e_entry;
-	uint32_t e_phoff;
-	uint32_t e_shoff;
-	uint32_t e_flags;
-	uint16_t e_ehsize;
-	uint16_t e_phentsize;
-	uint16_t e_phnum;
-	uint16_t e_shentsize;
-	uint16_t e_shnum;
-	uint16_t e_shstrndx;
-};
+// trapframe结构
+struct Trapframe {
+	struct PushRegs tf_regs;
+	uint16_t tf_es;
+	uint16_t tf_padding1;
+	uint16_t tf_ds;
+	uint16_t tf_padding2;
+	uint32_t tf_trapno;
+	/* below here defined by x86 hardware */
+	uint32_t tf_err;
+	uintptr_t tf_eip;
+	uint16_t tf_cs;
+	uint16_t tf_padding3;
+	uint32_t tf_eflags;
+	/* below here only when crossing rings, such as from user to kernel */
+	uintptr_t tf_esp;
+	uint16_t tf_ss;
+	uint16_t tf_padding4;
+} __attribute__((packed));
 ```
+关于这段程序我目前是这么理解的，在 `env_create` 函数中我们已经将所执行 ELF 文件的内容加载到了相应的内存空间中，同时装填好了该程序运行所需的 `Trapframe` 结构（`e->env_tf`），所以在 `env_pop_tf` 函数中我们就将这个 `trapframe` 里面所存储的寄存器值按顺序装填到相应寄存器中，`iret` 指令之后正式进入 `user mode`，按照 eip 找到用户程序的第一条指令开始执行（EIP 存储的是程序入口地址）。
+  
+在这里需要提一下，在 xv6 里除了第一个进程需要内核使用 `env_create` 来创建之外，其他的所有进程都是使用 `fock` 来创建。到这里我们已经成功创建了 xv6 中的第一个用户进程，多个用户进程的并行会在下个 lab 中涉及。下面我们需要先完成多个进程并行调度的基础-中断。
 
 # 2.中断和异常处理
 
