@@ -85,12 +85,36 @@ void unlock(int* lock_t) {
 
 
 
-
-
-
-
-int main(int argc,char* argv[])
-{
-	int a[10] = { [0] = 1, [2] = 5};
-	return 1;
+void func(int x) {
+    cout<<"void func(int x)"<<endl;
 }
+ 
+void func(char *y) {
+    cout<<"void func(int *y)"<<endl;
+}
+ 
+int main()
+{
+    int *p = new int(12);
+    int *q = p;
+    delete p;
+    cout << *q << endl;
+    return 0;
+   
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ //int a[10] = { [0] = 1, [2] = 5};
