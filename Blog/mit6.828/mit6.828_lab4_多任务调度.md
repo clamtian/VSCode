@@ -1,31 +1,13 @@
-我们这里只考虑单处理器下的中断，多处理器的中断会在下一个 lab 中涉及到。在单处理器下，外部中断会经历 3 个阶段：设备产生中断，中断控制器 PIC 接受和发送中断，CPU&OS 来实际处理中断。其中设备产生中断我们不做解释，主要来看一下后两步。
 
-单处理器下的中断控制器主要就是 8259A 处理器，8259A 的工作原理属于硬件部分，我这里没有做过多的研究。现在只需要知道单个 8259A 只能处理 8 个中断，而两个级联的 8259A 可以处理 15 个外部中断（两个中断处理器分别称作 master 和 slave）。PIC 接收到外部设备发来的中断请求且该中断没有被屏蔽时，会将中断向量发送给 CPU。
+在这个 lab 中，我们将会在多个同时运行的用户环境中实现抢占式多任务调度。
 
+在 Part A 部分，我们将为 JOS 增加多处理器特性，实现轮转调度，增加用户环境管理的系统调用（创建和销毁环境，分配和映射内存）。
 
+在 Part B，我们将会实现一个像 Unix 里一样的 fork() 函数，它会允许用户模式环境创建自身的副本。
 
-`env_id` 的生成规则很有意思，注意一下在 `env_free` 中并没有重置 `env_id` 的值，这就是为了用来下一次使用这个env结构体时生成一个新的`env_id`，区分之前用过的`env_id`，从generation的生成方式就能明白了。
+最后在 Part C 中，我们将为进程间通信 (inter-process communication IPC)添加支持，允许不同的用户环境显式地彼此进行交流与同步。我们也将为硬件时钟中断和抢占添加支持。
 
-
-
-
-
-
-
-
-
-
-
-
-在这个lab中，我们将会在多个同时运行的用户环境中实现抢占式多任务调度。
-
-在Part A部分，我们将为JOS增加多处理器特性，实现轮转(RR)调度，增加用户环境管理的系统调用(创建和销毁环境，分配和映射内存)。
-
-在Part B，我们将会实现一个像Unix里一样的fork()函数，它会允许用户模式环境创建自身的副本。
-
-最后在Part C中，我们将为进程间通信 (inter-process communication IPC)添加支持，允许不同的用户环境显式地彼此进行交流与同步。我们也将为硬件时钟中断和抢占添加支持。
-
-由于这个lab会涉及到内存分配，所以首先来看下这个lab要实现的内存图：
+由于这个 lab 会涉及到内存分配，所以首先来看下这个 lab 要实现的内存图：
 
 ![avatar](./image/lab4内存分布.png)
 
@@ -33,28 +15,24 @@
 
 ## 1.1 多处理器支持
 
-我们将使JOS支持“对称多处理器”(symmetric multiprocessing, SMP)，这是一种多处理器模型，其中所有cpu都具有对系统资源(如内存和I/O总线)的等效访问权。虽然SMP中的所有cpu在功能上都是相同的，但是在引导过程中它们可以分为两种类型:引导处理器(bootstrap processor, BSP)负责初始化系统和引导启动操作系统;只有在操作系统启动并运行之后，BSP才会激活应用程序处理器(the application processors, APs)。哪个处理器是BSP由硬件和BIOS决定。到目前为止，所有现有的JOS代码都在BSP上运行。
+我们将使 JOS 支持“对称多处理器”（symmetric multiprocessing, SMP），这是一种多处理器模型，其中所有 cpu 都具有对系统资源（如内存和I/O总线）的等效访问权。虽然 SMP 中的所有 cpu 在功能上都是相同的，但是在引导过程中它们可以分为两种类型：引导处理器（bootstrap processor, BSP）负责初始化系统和引导启动操作系统；只有在操作系统启动并运行之后，BSP 才会激活应用程序处理器(the application processors, APs)。哪个处理器是 BSP 由硬件和 BIOS 决定。到目前为止，所有现有的 JOS 代码都在 BSP 上运行。
 
-在SMP系统中，每个CPU都有一个相应的本地高级中断控制器单元 (local APIC LAPIC)。LAPIC单元负责在整个系统中传输中断。LAPIC还为其连接的CPU提供唯一的标识符。在本实验室中，我们利用了LAPIC单元的以下基本功能(`kern/lapic.c`):
+在 SMP 系统中，每个 CPU 都有一个相应的本地高级中断控制器单元 (local APIC LAPIC)。LAPIC 单元负责在整个系统中传输中断。LAPIC 还为其连接的 CPU 提供唯一的标识符。在本实验室中，我们利用了 LAPIC 单元的以下基本功能(`kern/lapic.c`):
 
-* 读取LAPIC标识符(APIC ID)来判断我们的代码当前运行在哪个CPU上(参见`cpunum()`)。
-* 将`STARTUP`中断信号( interprocessor interrupt, IPI)从BSP发送到APs，以打开其他cpu(参见`lapic_startap()`)。
-* 在Part C，我们编写LAPIC的内置计时器来触发时钟中断，以支持抢占式的多任务处理(参见`lapic_init()`)。
+* 读取 LAPIC 标识符(APIC ID)来判断我们的代码当前运行在哪个 CPU 上(参见`cpunum()`)。
+* 将 `STARTUP` 中断信号( interprocessor interrupt, IPI)从 BSP 发送到 APs，以打开其他 cpu (参见`lapic_startap()`)。
+* 在 Part C，我们编写 LAPIC 的内置计时器来触发时钟中断，以支持抢占式的多任务处理(参见`lapic_init()`)。
 
 > ### APIC
-> APIC（Advanced Programmable Interrupt Controller）基于分布式结构，分为两个单元，一个是处理器内部的Local APIC单元(LAPIC)，另一个是IO APIC单元，它们两个通过Interrupt Controller Communications (ICC) 总线连接。APIC作用一是减轻了内存总线中关于中断相关流量，二是可以在多处理器里面分担中断处理的负载。
+> APIC（Advanced Programmable Interrupt Controller）基于分布式结构，分为两个单元，一个是处理器内部的 Local APIC 单元(LAPIC)，另一个是 IO APIC 单元，它们两个通过 Interrupt Controller Communications (ICC) 总线连接。APIC 作用一是减轻了内存总线中关于中断相关流量，二是可以在多处理器里面分担中断处理的负载。
 >
-> LAPIC提供了 interprocessor interrupts (IPIs),它允许任意处理器中断其他处理器或者设置其他处理器，有好几种类型的IPIs，如INIT IPIs和STARTUP IPIs。每个LAPIC都有一个本地ID寄存器，每个IO APIC都有一个 IO ID寄存器，这个ID是每个APIC单元的物理名称，它可以用于指定IO中断和interprocess中断的目的地址。因为APIC的分布式结构，LAPIC和IO APIC可以是独立的芯片，也可以将LAPIC和CPU集成在一个芯片，如英特尔奔腾处理器（735\90, 815\100），而IO APIC集成在IO芯片，如英特尔82430 PCI-EISA网桥芯片。集成式APIC和分离式APIC编程接口大体是一样的，不同之处是集成式APIC多了一个STARTUP的IPI。
+> LAPIC 提供了 interprocessor interrupts (IPIs),它允许任意处理器中断其他处理器或者设置其他处理器，有好几种类型的 IPIs，如 INIT IPIs 和 STARTUP IPIs。每个 LAPIC 都有一个本地 ID 寄存器，每个 IO APIC 都有一个 IO ID 寄存器，这个 ID 是每个 APIC 单元的物理名称，它可以用于指定 IO 中断和 interprocess 中断的目的地址。因为 APIC 的分布式结构，LAPIC 和 IO APIC 可以是独立的芯片，也可以将 LAPIC 和 CPU 集成在一个芯片，而 IO APIC 集成在 IO 芯片。集成式 APIC 和分离式 APIC 编程接口大体是一样的，不同之处是集成式 APIC 多了一个 STARTUP 的 IPI。
 
-处理器访问它的LAPIC使用的是 MMIO，在MMIO里，一部分内存硬连线到了IO设备的寄存器，因此用于访问内存的load/store指令可以用于访问IO设备的寄存器。比如我们在实验1中用到 0xA0000开始的一段内存作为VGA显示缓存。LAPIC所在物理地址开始于0xFE000000(从Intel的文档和测试看这个地址应该是0xFEE00000)，在JOS里面内核的虚拟地址映射从`KERNBASE`(0xf00000000)来说，这个地址太高了，于是在JOS里面在`MMIOBASE`(0xef800000）地址处留了4MB空间用于MMIO，后面实验会用到更多的MMIO区域，为此我们要映射好设备内存到`MMIOBASE`这块区域，这个过程有点像boot_alloc，注意映射范围判断。
+处理器访问它的 LAPIC 使用的是 MMIO，在 MMIO 里，一部分内存硬连线到了 IO 设备的寄存器，因此用于访问内存的 load/store 指令可以用于访问 IO 设备的寄存器。比如我们在 lab1 中用到 0xA0000 开始的一段内存作为 VGA 显示缓存。LAPIC 所在物理地址开始于 0xFE000000 (从 Intel 的文档和测试看这个地址应该是 0xFEE00000)，在 JOS 里面内核的虚拟地址映射从 `KERNBASE`(0xf00000000)来说，这个地址太高了，于是在 JOS 里面在 `MMIOBASE`(0xef800000）地址处留了 4MB 空间用于 MMIO，后面实验会用到更多的 MMIO 区域，为此我们要映射好设备内存到 `MMIOBASE` 这块区域，这个过程有点像 boot_alloc，注意映射范围判断。
 
-## 1.2 AP启动流程
+## 1.2 APs 启动流程
 
 在启动AP之前，BSP应该首先收集关于多处理器系统的信息，例如cpu的总数、它们的APIC IDs和LAPIC单元的MMIO地址。`kern/mpconfig.c`中的`mp_init()`函数通过读取驻留在BIOS内存区域中的MP配置表来检索此信息。
-
-`boot_aps()`函数(在`kern/init.c`中)驱动AP引导进程。APs以实模式启动，非常类似于bootloader在`boot/boot.S`中启动的方式。因此，`boot_aps()`将AP entry代码(`kern/mpentry.S`)复制到在实模式中可寻址(addressable)的内存位置。与bootloader不同，我们可以控制AP将从何处开始执行代码;我们将AP entry代码复制到0x7000 (`MPENTRY_PADDR`)，但是任何未使用的、页面对齐的低于640KB(0xA0000以下)的物理地址都可以。
-
-`boot_aps()`通过向AP的LAPIC发送`STARTUP IPIs`依次激活AP，并带上AP要执行的初始入口地址CS:IP（`MPENTRY_PADDR`)。入口代码在 `kern/mpentry.S`，跟`boot/boot.S`非常相似。在简单的设置后，它将AP设置为保护模式，并开启分页，然后调用 `mp_main()`里面的C设置代码。`boot_aps()`会等待AP在其CpuInfo中的`cpu_status`字段发出`CPU_STARTED` 标志，然后继续唤醒下一个AP。为此需要将 `MPENTRY_PADDR` 这一页内存空出来。
 
 ```JavaScript
 void
@@ -84,10 +62,13 @@ i386_init(void)
 	sched_yield();
 }
 ```
-
 `lapic_init()`主要对LAPIC的一些寄存器进行设置，包括设置ID，version，以及禁止所有CPU的NMI(LINT1)，BSP的LAPIC要以Virtual Wire Mode运行，开启BSP的LINT0，以用于接收8259A芯片的中断等。
 
-`pic_init()`用于初始化8259A芯片的中断控制器。8259A芯片是一个中断管理芯片，中断来源除了来自硬件本身的NMI中断以及软件的INT n指令造成的软件中断外，还有来自外部硬件设备的中断(INTR)，这些外部中断时可以屏蔽的。
+`pic_init()`用于初始化8259A芯片的中断控制器。8259A芯片是一个中断管理芯片，中断来源除了来自硬件本身的NMI中断以及软件的INT n指令造成的软件中断外，还有来自外部硬件设备的中断(INTR)，这些外部中断是可以屏蔽的。
+
+`boot_aps()`函数(在`kern/init.c`中)驱动AP引导进程。APs以实模式启动，非常类似于bootloader在`boot/boot.S`中启动的方式。因此，`boot_aps()`将AP entry代码(`kern/mpentry.S`)复制到在实模式中可寻址(addressable)的内存位置。与bootloader不同，我们可以控制AP将从何处开始执行代码；我们将AP entry代码复制到0x7000 (`MPENTRY_PADDR`)，但是任何未使用的、页面对齐的低于640KB(0xA0000以下)的物理地址都可以。
+
+`boot_aps()`通过向AP的LAPIC发送`STARTUP IPIs`依次激活AP，并带上AP要执行的初始入口地址CS:IP（`MPENTRY_PADDR`)。入口代码在 `kern/mpentry.S`，跟`boot/boot.S`非常相似。在简单的设置后，它将AP设置为保护模式，并开启分页，然后调用 `mp_main()` 对 AP 进行初始化。`boot_aps()`会等待 `mp_main()` 中将 AP 的 `cpu_status` 字段设置成 `CPU_STARTED`，表明当前 AP 已经启动成功，然后继续唤醒下一个AP。为此需要将 `MPENTRY_PADDR` 这一页内存空出来。
 
 ## 1.3 cpu初始化
 
@@ -136,7 +117,9 @@ JOS中的轮转调度的工作原理如下：
 
 * 用户环境可以通过`sys_yield()`函数来调用内核的`sched_yield()`函数，从而自愿放弃CPU并切换到一个不同的环境。
 
-## 1.6 创建进程的系统调用
+# 2. 创建子进程
+
+## 2.1 创建进程的系统调用
 
 虽然JOS内核现在能够在多个用户级环境之间运行和切换，但它仍然仅限于内核最初设置的运行环境。现在将实现必要的JOS系统调用，以允许用户环境创建和启动其他新用户环境。
 
@@ -168,7 +151,7 @@ Unix提供了`fork()`系统调用作为其进程创建函数。`fork()`复制调
 
 在 `user/dumbfork.c`中有一个类似unix的`fork()`的实现，它使用了上面这几个系统调用运行了子进程，子进程拷贝了父进程的地址空间。父子进程交替切换，最后父进程在循环10次后退出，而子进程则是循环20次后退出。
 
-# 2.写时复制(Copy-on-Write Fork)
+## 2.2 写时复制(Copy-on-Write Fork)
 
 如之前提到的，Unix提供了`fork()`系统调用作为其主要的进程创建原语。`fork()`系统调用将调用者进程(父进程)的地址空间复制到一个新创建的进程(子进程)。
 
@@ -178,13 +161,13 @@ xv6 Unix 通过复制父进程物理页所有数据到分配给子进程的物�
 
 出于这个原因，Unix的后续版本利用虚拟内存硬件，允许父进程和子进程共享映射到各自地址空间的内存，直到其中一个进程实际修改它。这种技术称为“copy-on-write”(写时复制)。为此，内核将在`fork()`上将地址空间映射从父节点复制到子节点，而不是将映射页面的内容复制到子节点，同时将当前共享的页面标记为read-only。当两个进程中的一个试图写入其中一个共享页面时，该进程将接受一个page fault。此时，Unix内核意识到页面实际上是一个“virtual”或“copy-on-write”副本，因此它为故障处理过程创建了一个新的、私有的、可写的页面副本。这样，单个页面的内容在实际写入之前不会被复制。这种优化使得`fork()`后面紧跟的子进程的`exec()`花销减少:子进程在调用`exec()`之前可能只需要复制一个页面(the current page of its stack)。
 
-## 2.1 用户程序页面错误处理
+### 2.2.1 用户程序页面错误处理
 
 新的fork并不直接拷贝内存数据，而是先对共享的内存页设置一个特殊标记，然后在父子进程的一方写共享内存发生页面错误时，内核捕获异常并分配新的页和拷贝数据。
 
 COW只是用户级页面错误处理的许多可能用途之一。大多数Unix内核最初只映射新进程的堆栈，随着堆栈消耗增加，访问尚未映射的堆栈地址会导致页面错误，内核捕获错误后会分配并映射附加的堆栈页面。典型的Unix内核必须跟踪进程空间的每个区域发生页面错误时要采取的操作。例如，堆栈区域中的错误通常会分配并映射新的物理内存页面，程序的BSS区域中的错误通常会分配一个新页面，填充零并映射它。而可执行代码中导致的页面错误将触发内核从磁盘读取可执行文件的相应页面，然后映射它。
 
-## 2.2 用户程序页面错误处理流程
+### 2.2.2 用户程序页面错误处理流程
 
 为了实现写时复制，首先要实现用户程序页面错误处理功能。基本流程是：
 
@@ -194,7 +177,7 @@ COW只是用户级页面错误处理的许多可能用途之一。大多数Unix�
 * 当用户进程发生页面错误时，陷入内核。内核先判断该进程是否设置了 `env_pgfault_upcall`，如果没有设置，则报错。如果设置了，则切换用户进程栈到异常栈，设置异常栈内容，然后设置EIP为 `env_pgfault_upcall` 地址，切回用户态执行 `env_pgfault_upcall` 函数(即`_pgfault_upcall`)；
 * `env_pgfault_upcall`作为页面错误处理函数的入口函数，它在用户态运行。先调用步骤1中注册的页面错误处理函数，然后再恢复进程在页面错误之前的栈内容，并切回常规栈，跳转到页面错误之前的地方继续运行。
 
-## 2.3 用户进程异常栈和常规栈
+### 2.2.3 用户进程异常栈和常规栈
 
 为了处理用户级页面错误，JOS采用了一个用户异常栈`UXSTACKTOP`(0xeec00000)，注意用户进程的常规栈用的是`USTACKTOP`(0xeebfe000)。当用户进程发生页面错误时，内核会切换到异常栈，异常栈大小也是PGSIZE。从用户常规栈切换到异常栈的过程有点像发生中断/异常时从用户态进入内核时的堆栈切换。
 
@@ -202,7 +185,7 @@ COW只是用户级页面错误处理的许多可能用途之一。大多数Unix�
 
 需要支持用户级页面错误处理的用户进程都需要为它的异常栈分配内存，可以使用前面用过的`sys_page_alloc`分配内存。
 
-## 2.4 调用用户页面错误处理函数
+### 2.2.4 调用用户页面错误处理函数
 
 修改`kern/trap.c`中的页面错误处理代码以支持用户进程的页面错误处理。如果用户进程没有注册页面错误处理函数，则跟之前一样返回错误即可。而如果设置了页面错误处理函数，则需要在异常栈中压入下面内容以记录出错时的寄存器状态，为了在错误处理完成之后重新回到出错的地方继续执行，这些内容正好构成了一个UTrapframe结构体，方便统一处理，接着设置EIP为`env_pgfault_upcall`函数地址，并将进程的堆栈切换到异常栈，然后开始运行页面错误处理函数。
 
@@ -366,7 +349,7 @@ _pgfault_upcall:
 
 然后将`trip-time ESP - 4`放入到esp寄存器中，此时esp指向`trap-time eip`，最后使用ret将执行指令跳转至出错时的程序。
 
-## 2.5 写时复制总流程
+### 2.2.5 写时复制总流程
 
 * 父进程调用`fork()`创建新进程；
 * `fork()`中调用`set_pgfault_handler`设置页面错误处理程序；
@@ -381,7 +364,7 @@ _pgfault_upcall:
 * `pgfault()`检查这是一个写错误(错误码中的FEC_WR)且页面权限是COW的，如果不是则报错;
 * `pgfault()`分配一个新的物理页，并映射到一个临时位置，然后将出错页面的内容拷贝到新的物理页中，然后将新的页设置为用户可读写权限，并映射到对应位置。
 
-# 3.抢占式调度和进程间通信
+# 3. 抢占式调度和进程间通信
 
 ## 3.1 时钟中断
 
@@ -399,7 +382,7 @@ JOS IPC中的消息包括两个部分：一个32位的值以及一个可选的�
 
 进程调用 `sys_ipc_recv()` 接收消息，调用 `sys_ipc_try_send()` 发送消息。如果要发送页面映射，则调用时设置srcva参数，表示要将srcva处的页面映射共享给接收进程。而接收进程的 `sys_ipc_recv()` 如果希望接收页面映射，则会提供一个 dstva 参数。如果发送进程和接收进程都没有设置参数表示希望传输页面映射，则不传输。内核会在接收进程的 `env_ipc_perm` 字段设置接收的页面映射的权限。
 
-任何进程都可以发送消息给其他进程，不需要它们是父子进程。这里的安全由IPC相关系统调用保障，一个进程不能通过发送消息导致另一个进程奔溃，除非接收消息的进程本身存在BUG。
+任何进程都可以发送消息给其他进程，不需要它们是父子进程。这里的安全由 IPC 相关系统调用保障，一个进程不能通过发送消息导致另一个进程奔溃，除非接收消息的进程本身存在 BUG。
 
 1. https://pdos.csail.mit.edu/6.828/2018/labs/lab4/
 2. https://www.jianshu.com/p/fc9a8572a830
