@@ -100,7 +100,7 @@ poll 不再用 BitsMap 来存储所关注的文件描述符，取而代之用动
 
 ## 2.2 epoll
 
-先复习下 epoll 的用法。如下的代码中，先用e poll_create 创建一个 epol l对象 epfd，再通过 epoll_ctl 将需要监视的 socket 添加到epfd中，最后调用 epoll_wait 等待数据。
+先复习下 epoll 的用法。如下的代码中，先用 epoll_create 创建一个 epoll 对象 epfd，再通过 epoll_ctl 将需要监视的 socket 添加到 epfd 中，最后调用 epoll_wait 等待数据。
 
 ```javascript
 int s = socket(AF_INET, SOCK_STREAM, 0);
