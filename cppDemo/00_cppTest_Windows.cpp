@@ -13,6 +13,8 @@
 #include <iostream>
 #include <stdlib.h>
 #include <time.h>
+#include <unistd.h>  
+#include <stdio.h>  
 
 typedef long int LL;
 
@@ -20,88 +22,28 @@ using namespace std;
 
 
 
-const int N = 100001;
-
-int q[N];
-int size = 0;
-
-int pop() {
-    int res = q[0];
-    swap(q[0], q[--size]);
-    int idx = 0, l = 1;
-    while (l < size) {
-        int t = l + 1 < size && q[l + 1] > q[l] ? l + 1 : l;
-        t = q[idx] > q[t] ? idx : t;
-        if (t == idx) break;
-        swap(q[t], q[idx]);
-        idx = t;
-        l = idx * 2 + 1;
-    }
-    return res;
-}
 
 
-
-void insert(int x) {
-    int t = size;
-    q[size++] = x;
-    while (q[t] > q[(t - 1) / 2]) {
-        swap(q[t], q[(t - 1) / 2]);
-        t = (t - 1) / 2;
-    }
-
-}
-
-
-int lock_t = 0;
-
-int testAndSet(int* lock, int new_val) {
-    int old_val = *lock;
-    *lock = new_val;
-    return old_val;    
-}
-
-
-void lock(int* lock_t) {
-    while (testAndSet(lock_t, 1) == 1) {
-        /*
-         * 保存当前进程的状态 S
-         * 把 S 插入到阻塞队列（获取不到当前锁而阻塞）
-         * 陷入内核态  执行进程调度
-         */
-    }
-}
-
-void unlock(int* lock_t) {
-    *lock_t = 0;
-    // 取出阻塞队列队头  执行
-}
-
-
-
-
-
-
-
-
-
-void func(int x) {
-    cout<<"void func(int x)"<<endl;
-}
- 
-void func(char *y) {
-    cout<<"void func(int *y)"<<endl;
-}
- 
-int main()
-{
-    int *p = new int(12);
-    int *q = p;
-    delete p;
-    cout << *q << endl;
-    return 0;
-   
-}
+int main ()   
+{   
+    pid_t fpid; //fpid表示fork函数返回的值  
+    int count=0;  
+    fpid = fork();   
+    if (fpid < 0)   
+        printf("error in fork!");   
+    else if (fpid == 0) {  
+        printf("i am the child process, my process id is %d/n",getpid());   
+        printf("我是爹的儿子/n");//对某些人来说中文看着更直白。  
+        count++;  
+    }  
+    else {  
+        printf("i am the parent process, my process id is %d/n",getpid());   
+        printf("我是孩子他爹/n");  
+        count++;  
+    }  
+    printf("统计结果是: %d/n",count);  
+    return 0;  
+} 
 
 
 
