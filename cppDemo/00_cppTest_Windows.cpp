@@ -15,34 +15,40 @@
 #include <time.h>
 #include <unistd.h>  
 #include <stdio.h>  
+#include <ctime>
 
 typedef long int LL;
 
 using namespace std;
 
 
-
-
-
 int main ()   
 {   
-    pid_t fpid; //fpid表示fork函数返回的值  
-    int count=0;  
-    fpid = fork();   
-    if (fpid < 0)   
-        printf("error in fork!");   
-    else if (fpid == 0) {  
-        printf("i am the child process, my process id is %d/n",getpid());   
-        printf("我是爹的儿子/n");//对某些人来说中文看着更直白。  
-        count++;  
-    }  
-    else {  
-        printf("i am the parent process, my process id is %d/n",getpid());   
-        printf("我是孩子他爹/n");  
-        count++;  
-    }  
-    printf("统计结果是: %d/n",count);  
-    return 0;  
+    int tot = 10000;
+    int f = 1;
+    srand((int)time(0));  // 产生随机种子  把0换成NULL也行
+    while (tot >= 5000 && tot < 100000) {
+        int k = 100;
+        tot -= 100;
+        int r = 1;
+        while (r && tot >= 5000 && tot < 100000) {
+            
+            r = rand() % 2;
+            if (r) {
+                tot += 100;
+            }
+            cout << "epoll " << f++ << ": tot = " << tot << endl;
+        }
+        while (r == 0 && tot > 0 && tot >= 5000 && tot < 100000) {
+            k *= 2;
+            r = rand() % 2;
+            if (r == 0) tot -= k;
+            else tot += k;
+            cout << "epoll " << f++ << ": tot = " << tot << endl;
+        }
+        
+    }
+    return 0;
 } 
 
 
