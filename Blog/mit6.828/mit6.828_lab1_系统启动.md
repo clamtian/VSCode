@@ -4,9 +4,13 @@
 
 BIOS(Basic Input Output System)"基本输入输出系统"，它是一组固化到主板上一个ROM芯片上的程序，使用汇编语言编写。PC通电后，CPU马上就从地址0xFFFF0处开始执行指令，这个地址在系统BIOS的地址范围内，将BIOS程序加载到内存中执行，BIOS接下来的作用包括机器自检，对系统进行初始化，识别并加载主板上的重要硬件和集成元件，如硬盘、显卡、声卡以及各种接口，然后按照**预设顺序**读取存储器上操作系统的引导文件Boot Loader，储存Boot Loader的存储器可以是软盘、硬盘、CD-ROM甚至是网络输入，可以在BIOS的设置页面更改读取Boot Loader的搜索顺序。
 
-那么在这其中就有一个问题，那就是，BIOS程序是固化到自己的ROM芯片中的，那CPU是如何在刚通电的情况下就能读取到BIOS程序并且运行的？再者，上段的说法也有些问题，“CPU马上就从地址0xFFFF0处开始执行指令，这个地址在系统BIOS的地址范围内”，那地址0xFFFF0指的是什么地址？是外加内存条RAM的内存地址还是储存BIOS程序的ROM地址？这又涉及到现代PC的内存地址是如何编排的。我也是查了很多资料才摸到一些门道，下面的说法糅合了我从网上搜索的资料和自己的整合以及猜测，**不保证正确**，仅为缕清自己的思路。
+那么在这其中就有一个问题，那就是，BIOS程序是固化到自己的ROM芯片中的，那CPU是如何在刚通电的情况下就能读取到BIOS程序并且运行的？再者，上段的说法也有些问题，“CPU马上就从地址0xFFFF0处开始执行指令，这个地址在系统BIOS的地址范围内”，那地址0xFFFF0指的是什么地址？是外加内存条RAM的内存地址还是储存BIOS程序的ROM地址？这又涉及到现代PC的内存地址是如何编排的。我也是查了很多资料才摸到一些门道，下面的说法糅合了我从网上搜索的资料和自己的整合以及猜测，**不保证正确**，仅为缕清自己的思路：
 
 在计算机通电完成之后，CPU会自动将其CS寄存器设定为0xFFFF，IP寄存器设定为0x0000。关于CS寄存器和IP寄存器的介绍可以看文末的链接6，简单来说CS是代码段寄存器，IP是指令指针寄存器(相当于偏移地址)，而CPU在访问内存的时候访问的是物理内存地址，而这个物理地址就是由CS和IP这两个寄存器中的值合成的(物理地址=段地址X16+偏移地址)。所以如果将CS寄存器设定为0xFFFF，IP寄存器设定为0x0000，那么这时的物理地址就=0xFFFF*16+0x0000=0xFFFF0，而在0xFFFF0存放的是什么呢？其实是一条无条件转移指令JMP，这个JMP会将程序跳转到BIOS真正的入口点。至于跳转到哪里，那么不同的BIOS会有不同的跳转地址。
+
+* 20230505更新：在计算机系统中，每个存储设备都被赋予一段地址空间（也称为地址范围）。BIOS芯片和内存条都有自己的地址范围，在本实验中以及早期的计算机系统中，BIOS芯片的地址范围是 0xF0000 到 0xFFFFF。当计算机的内存大小突破 1M（即0XFFFFF上）之后，BIOS 的地址范围一直处于 CPU 能寻址的内存最高位置。例如在内存为 4G 的系统中，BIOS 的地址范围为 0xFFFFF0000 到 0xFFFFFFFF。在BIOS芯片和内存条之间有一个地址解码器，它可以根据地址指针将访问路由到正确的存储器位置。
+
+* 值得注意的是，为了与初代机保存兼容，同时为了提高访问速度，现代计算机的 0xF0000 到 0xFFFFF 同样被保留为 BIOS 的空间区域，虽然在物理上它属于系统 RAM 空间，这段空间被称为 BIOS 的**影子区域**。而由于目前计算机中 BIOS 的容量大多已经超过了 64KB，所以在现代计算机启动时，首先在内存顶端的位置执行一部分 BIOS 程序（即不属于低端 64KB 位置的 BIOS 程序，使用 32 位大模式技术突破实模式），然后再将与初代机兼容的 64KB BIOS 代码和数据复制到内存低端 1M 末端的 64K 处，然后跳转到这个地方并且让 CPU 以实模式启动。
 
 ![avatar](./image/8086.png)
 
@@ -262,16 +266,16 @@ cons_putc (c=-267321620)
 f0100034:	bc 00 00 11 f0       	mov    $0xf0110000,%esp
 ```
 
-
-1. https://www.jianshu.com/p/af9d7eee635e
-2. https://blog.csdn.net/rongwenbin/article/details/18962057
-3. https://baike.baidu.com/item/BIOS%E5%BD%B1%E5%AD%90%E5%86%85%E5%AD%98
-4. https://blog.csdn.net/hwxlovezy/article/details/53454305
-5. https://www.cnblogs.com/wsw-seu/p/10475956.html
-6. https://blog.csdn.net/weixin_37924880/article/details/78644659
-7. https://www.zhihu.com/question/311449926
-8. https://www.cnblogs.com/chanchan/p/7648490.html
-9. https://blog.csdn.net/suz_cheney/article/details/24586745
-10. https://blog.csdn.net/a1023182899/article/details/78162573
-11. https://www.jianshu.com/p/8ec9063a37bd
-12. https://www.jianshu.com/p/015f8e904a71
+1. https://pdos.csail.mit.edu/6.828/2018/labs/lab1/
+2. https://www.jianshu.com/p/af9d7eee635e
+3. https://blog.csdn.net/rongwenbin/article/details/18962057
+4. https://baike.baidu.com/item/BIOS%E5%BD%B1%E5%AD%90%E5%86%85%E5%AD%98
+5. https://blog.csdn.net/hwxlovezy/article/details/53454305
+6. https://www.cnblogs.com/wsw-seu/p/10475956.html
+7. https://blog.csdn.net/weixin_37924880/article/details/78644659
+8. https://www.zhihu.com/question/311449926
+9.  https://www.cnblogs.com/chanchan/p/7648490.html
+10. https://blog.csdn.net/suz_cheney/article/details/24586745
+11. https://blog.csdn.net/a1023182899/article/details/78162573
+12. https://www.jianshu.com/p/8ec9063a37bd
+13. https://www.jianshu.com/p/015f8e904a71
