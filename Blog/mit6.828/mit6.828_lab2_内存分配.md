@@ -11,7 +11,7 @@
 
 # 2.页表(page table)管理
 
-这个lab的核心就是要搞清楚 `x86` 的内存管理机制，强烈建议大家阅读Lab讲义、Lab搭配的[指导书](https://pdos.csail.mit.edu/6.828/2018/readings/i386/c05.htm) 和Lab已经提供的代码，对照着本文来进行理解。
+这个lab的核心就是要搞清楚 `x86` 的内存管理机制，强烈建议大家阅读Lab讲义、Lab搭配的[指导书](https://pdos.csail.mit.edu/6.828/2018/readings/i386/c05.htm)和Lab已经提供的代码，对照着本文来进行理解。
 
 先来看看 `x86` 的内存管理架构：
 
@@ -26,7 +26,10 @@ Software             |              |-------->|           |---------->  RAM
                      +--------------+         +-----------+
         Virtual(Logical)              Linear                 Physical
 ```
-我们代码中的 C 指针就是虚拟地址(virtual address，也称逻辑地址logical address)中的 offset，通过描述符表和段选择子(selector)，通过分段机制转换为线性地址(linear address)，因为JOS中设置的段基址为0，所以线性地址就等于offset，也就是我们代码中的c指针。在未开启分页之前，线性地址就是物理地址。而在我们开启分页之后，线性地址经过 CPU 的MMU部件的页式转换得到物理地址(physical address)，而物理地址就是数据真正存在内存上的地址。
+
+![](./image/lab2_Memory_structure.png)
+
+我们代码中的 C 指针就是虚拟地址(virtual address，也称逻辑地址logical address)中的 offset，通过描述符表和段选择子(selector)，通过分段机制转换为线性地址(linear address)，因为本实验中并不使用分段机制，所以JOS中设置的段基址为0，所以线性地址就等于offset。在未开启分页之前，线性地址就是物理地址。而在我们开启分页之后，线性地址经过 CPU 的MMU部件的页式转换得到物理地址(physical address)，而物理地址就是数据真正存在内存上的地址。
 
 从实现上来看，一个线性地址就是一个32位的 `uint32_t` 类型。具体组成如下图：
 
